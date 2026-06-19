@@ -104,9 +104,6 @@ public class SecurityConfig {
                 // 权限策略
                 .permissionsPolicy(permissions -> permissions
                     .policy("geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"))
-
-                // ContentType选项
-                .contentTypeOptions(contentType -> {})
             )
 
             // 异常处理
