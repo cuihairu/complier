@@ -1,6 +1,6 @@
 # Multi-stage build for Oddsmaker Control Service
 # Stage 1: Build the application
-FROM gradle:8.7-jdk-21 AS build
+FROM gradle:8.10-jdk21 AS build
 
 WORKDIR /workspace
 
