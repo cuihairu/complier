@@ -50,7 +50,9 @@ jobs:
       - name: Get pnpm store directory
         id: pnpm-cache
         shell: bash
-        run: echo "store-path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
+        run: |
+          STORE_PATH=$(pnpm store path --silent)
+          echo "store-path=$STORE_PATH" >> $GITHUB_OUTPUT
 
       - name: Cache pnpm dependencies
         uses: actions/cache@v4
