@@ -196,6 +196,8 @@ public class GameService {
         validateStorageProfile(entity.storageProfileId);
         entity.dataNamespace = entity.dataNamespace != null ? entity.dataNamespace : gameId + "_" + environmentName;
         entity.kafkaTopicPrefix = entity.kafkaTopicPrefix != null ? entity.kafkaTopicPrefix : entity.dataNamespace;
+        // 按游戏分库：生成数据库名称
+        entity.databaseName = entity.databaseName != null ? entity.databaseName : generateDatabaseName(gameId, environmentName);
 
         return new EnvironmentDTO(gameEnvironmentRepo.save(entity));
     }
@@ -454,7 +456,20 @@ public class GameService {
         environment.enableAlerts = true;
         environment.enableDebugMode = debugMode;
         environment.kafkaTopicPrefix = dataNamespace;
+        // 按游戏分库：生成数据库名称
+        environment.databaseName = generateDatabaseName(gameId, name);
         return environment;
+    }
+
+    /**
+     * 生成数据库名称（按游戏分库架构）
+     * 格式: game_{game_id}_{env_name}
+     * 例如: game_demo_prod, game_rpg_staging
+     */
+    private String generateDatabaseName(String gameId, String environmentName) {
+        // Remove "game_" prefix if already present
+        String cleanGameId = gameId.startsWith("game_") ? gameId.substring(5) : gameId;
+        return "game_" + cleanGameId + "_" + environmentName;
     }
 
     private void ensureDefaultStorageProfiles() {

@@ -34,6 +34,7 @@ public class EnvironmentDTO {
     public String apiEndpoint;
     public String dataNamespace;
     public String kafkaTopicPrefix;
+    public String databaseName; // 按游戏分库：数据库名称
     public Integer dataRetentionDays;
     public Long maxEventsPerDay;
 
@@ -74,6 +75,7 @@ public class EnvironmentDTO {
         this.apiEndpoint = entity.apiEndpoint;
         this.dataNamespace = entity.dataNamespace;
         this.kafkaTopicPrefix = entity.kafkaTopicPrefix;
+        this.databaseName = entity.databaseName;
         this.dataRetentionDays = entity.dataRetentionDays;
         this.maxEventsPerDay = entity.maxEventsPerDay;
         this.enableDebugMode = entity.enableDebugMode;
@@ -105,6 +107,7 @@ public class EnvironmentDTO {
         entity.apiEndpoint = this.apiEndpoint;
         entity.dataNamespace = this.dataNamespace;
         entity.kafkaTopicPrefix = this.kafkaTopicPrefix;
+        entity.databaseName = this.databaseName;
         entity.dataRetentionDays = this.dataRetentionDays;
         entity.maxEventsPerDay = this.maxEventsPerDay;
         entity.enableDebugMode = this.enableDebugMode != null ? this.enableDebugMode : false;
@@ -131,6 +134,7 @@ public class EnvironmentDTO {
         if (this.apiEndpoint != null) entity.apiEndpoint = this.apiEndpoint;
         if (this.dataNamespace != null) entity.dataNamespace = this.dataNamespace;
         if (this.kafkaTopicPrefix != null) entity.kafkaTopicPrefix = this.kafkaTopicPrefix;
+        if (this.databaseName != null) entity.databaseName = this.databaseName;
         if (this.dataRetentionDays != null) entity.dataRetentionDays = this.dataRetentionDays;
         if (this.maxEventsPerDay != null) entity.maxEventsPerDay = this.maxEventsPerDay;
         if (this.enableDebugMode != null) entity.enableDebugMode = this.enableDebugMode;

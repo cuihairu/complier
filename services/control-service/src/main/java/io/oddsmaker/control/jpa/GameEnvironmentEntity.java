@@ -58,6 +58,14 @@ public class GameEnvironmentEntity {
     @Column(name = "kafka_topic_prefix", length = 50)
     public String kafkaTopicPrefix; // Kafka主题前缀
 
+    /**
+     * 数据库名称（按游戏分库架构）
+     * 格式: game_{game_id}_{env_name}
+     * 例如: game_demo_prod, game_rpg_staging
+     */
+    @Column(name = "database_name", length = 128)
+    public String databaseName;
+
     @Column(name = "data_retention_days")
     public Integer dataRetentionDays; // 继承自游戏配置，可覆盖
 

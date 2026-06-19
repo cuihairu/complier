@@ -2,27 +2,213 @@
   "$id": "schema/json/oddsmaker-event-schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Oddsmaker Game Event v1",
+  "description": "Canonical analytics and risk-control event schema. Note: game_id and environment are routing fields used by Gateway to determine the target database; they are not stored in ClickHouse as they are implicit from the database/table name.",
   "type": "object",
   "required": ["event_id", "game_id", "environment", "event_name", "device_id", "ts_client"],
   "properties": {
-    "event_id": {"type": "string", "minLength": 8, "maxLength": 64},
-    "game_id": {"type": "string", "minLength": 1, "maxLength": 64},
-    "environment": {"type": "string", "minLength": 1, "maxLength": 32},
-    "event_type": {"type": ["string", "null"], "maxLength": 32},
-    "event_name": {"type": "string", "minLength": 1, "maxLength": 96},
-    "user_id": {"type": ["string", "null"], "maxLength": 128},
-    "device_id": {"type": "string", "minLength": 1, "maxLength": 128},
-    "session_id": {"type": ["string", "null"], "maxLength": 128},
-    "ts_client": {"oneOf": [{"type": "string", "format": "date-time"}, {"type": "number"}]},
-    "ts_server": {"oneOf": [{"type": "string", "format": "date-time"}, {"type": "number"}, {"type": "null"}]},
-    "platform": {"type": ["string", "null"], "maxLength": 32},
-    "app_version": {"type": ["string", "null"], "maxLength": 32},
-    "country": {"type": ["string", "null"], "maxLength": 2},
-    "client_ip": {"type": ["string", "null"], "maxLength": 64},
-    "user_agent": {"type": ["string", "null"], "maxLength": 512},
-    "revenue_amount": {"type": ["number", "null"]},
-    "revenue_currency": {"type": ["string", "null"], "maxLength": 3},
-    "props": {"type": ["object", "null"], "additionalProperties": true}
+    "event_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 64,
+      "description": "Unique event identifier"
+    },
+    "game_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Game identifier for routing (NOT stored in ClickHouse, implicit from database name)"
+    },
+    "environment": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "description": "Environment (dev/staging/prod) for routing (NOT stored in ClickHouse, implicit from database name)"
+    },
+    "event_type": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Event type category: session, user, business, resource, progression, design, error, ad"
+    },
+    "event_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 96,
+      "description": "Specific event name"
+    },
+    "user_id": {
+      "type": ["string", "null"],
+      "maxLength": 128,
+      "description": "User account identifier"
+    },
+    "device_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Device identifier"
+    },
+    "player_id": {
+      "type": ["string", "null"],
+      "maxLength": 128,
+      "description": "Player identifier (game-specific, may differ from user_id)"
+    },
+    "character_id": {
+      "type": ["string", "null"],
+      "maxLength": 128,
+      "description": "Character identifier (for games with multiple characters per account)"
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "maxLength": 128,
+      "description": "Session identifier"
+    },
+    "ts_client": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "number"}
+      ],
+      "description": "Client timestamp (ISO 8601 or milliseconds since epoch)"
+    },
+    "ts_server": {
+      "oneOf": [
+        {"type": "string", "format": "date-time"},
+        {"type": "number"},
+        {"type": "null"}
+      ],
+      "description": "Server timestamp (ISO 8601 or milliseconds since epoch)"
+    },
+    "platform": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Platform: ios, android, web, pc, console"
+    },
+    "app_version": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Application version"
+    },
+    "sdk_version": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "SDK version"
+    },
+    "country": {
+      "type": ["string", "null"],
+      "maxLength": 2,
+      "description": "ISO 3166-1 alpha-2 country code"
+    },
+    "client_ip": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Client IP address (for geo-location and risk control)"
+    },
+    "user_agent": {
+      "type": ["string", "null"],
+      "maxLength": 512,
+      "description": "User agent string"
+    },
+    "server_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Server/shard identifier (for MMORPG multi-server games)"
+    },
+    "guild_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Guild/clan identifier"
+    },
+    "match_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Match/session identifier (for matchmaking games)"
+    },
+    "level_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Level/stage identifier"
+    },
+    "game_mode": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Game mode (pvp, pve, ranked, casual)"
+    },
+    "order_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Order/transaction identifier (for revenue events)"
+    },
+    "product_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Product/Item identifier (for revenue events)"
+    },
+    "revenue_amount": {
+      "type": ["number", "null"],
+      "description": "Revenue amount (for revenue events)"
+    },
+    "revenue_currency": {
+      "type": ["string", "null"],
+      "maxLength": 3,
+      "description": "Revenue currency (ISO 4217 code)"
+    },
+    "receipt_hash": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Payment receipt hash for fraud detection"
+    },
+    "resource_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Resource identifier (for resource flow events)"
+    },
+    "resource_amount": {
+      "type": ["integer", "null"],
+      "description": "Resource amount (for resource flow events)"
+    },
+    "flow_type": {
+      "type": ["string", "null"],
+      "maxLength": 16,
+      "description": "Resource flow type: source or sink"
+    },
+    "operation_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Operation identifier (for linking related resource changes)"
+    },
+    "operation_type": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Operation type (e.g., daily_reward, purchase_item)"
+    },
+    "ad_network": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Ad network identifier"
+    },
+    "ad_placement": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Ad placement identifier"
+    },
+    "ad_format": {
+      "type": ["string", "null"],
+      "maxLength": 32,
+      "description": "Ad format: rewarded, interstitial, banner"
+    },
+    "ad_impression_id": {
+      "type": ["string", "null"],
+      "maxLength": 64,
+      "description": "Ad impression identifier"
+    },
+    "experiments": {
+      "type": ["object", "null"],
+      "additionalProperties": {"type": "string"},
+      "description": "Active experiments and variants"
+    },
+    "props": {
+      "type": ["object", "null"],
+      "additionalProperties": true,
+      "description": "Additional properties for custom event attributes"
+    }
   },
-  "additionalProperties": true
+  "additionalProperties": false
 }
