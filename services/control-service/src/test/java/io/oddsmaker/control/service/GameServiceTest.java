@@ -188,7 +188,7 @@ class GameServiceTest {
     @DisplayName("删除游戏 - 成功（非LIVE状态）")
     void deleteGame_Success() {
         // Given
-        testGame.status = GameEntity.GameStatus.DRAFT;
+        testGame.status = GameEntity.GameStatus.DEVELOPMENT;
         when(gameRepo.findById("game_test123")).thenReturn(Optional.of(testGame));
         when(gameRepo.save(any(GameEntity.class))).thenReturn(testGame);
 
