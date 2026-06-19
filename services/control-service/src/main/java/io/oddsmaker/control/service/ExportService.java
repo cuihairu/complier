@@ -75,7 +75,7 @@ public class ExportService {
         job = exportJobRepo.save(job);
 
         // 记录审计日志
-        auditLogService.logDataExport(exportType, job.id, job.fileName, userId, null);
+        auditLogService.logDataExport(exportType, job.id, job.fileName, userId, userId, null);
 
         logger.info("Created export job: {} for user: {} in game: {}", job.id, userId, gameId);
         return job;

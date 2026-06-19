@@ -169,18 +169,18 @@ public class RiskDashboardService {
                 // 获取最近的案例
                 List<RiskCaseEntity> recentCases = riskCaseRepo.findByRiskRuleId(rule.id);
 
-                return Map.of(
-                    "ruleId", rule.id,
-                    "ruleName", rule.displayName != null ? rule.displayName : rule.name,
-                    "category", rule.category.name(),
-                    "riskLevel", rule.riskLevel.name(),
-                    "actionType", rule.actionType.name(),
-                    "triggerCount", triggerCount,
-                    "blockCount", blockCount,
-                    "blockRate", blockRate,
-                    "recentCases", recentCases.size(),
-                    "lastTriggered", rule.lastTriggeredAt
-                );
+                Map<String, Object> result = new java.util.HashMap<>();
+                result.put("ruleId", rule.id);
+                result.put("ruleName", rule.displayName != null ? rule.displayName : rule.name);
+                result.put("category", rule.category.name());
+                result.put("riskLevel", rule.riskLevel.name());
+                result.put("actionType", rule.actionType.name());
+                result.put("triggerCount", triggerCount);
+                result.put("blockCount", blockCount);
+                result.put("blockRate", blockRate);
+                result.put("recentCases", recentCases.size());
+                result.put("lastTriggered", rule.lastTriggeredAt);
+                return result;
             })
             .collect(Collectors.toList());
     }

@@ -399,16 +399,6 @@ public class AuditLogService {
     }
 
     /**
-     * 记录解除封禁操作
-     */
-    public void logUnblock(String gameId, String riskCaseId, String targetId, String unblockedBy, String clientIp) {
-        log(AuditLogEntity.AuditAction.UNBLOCK, "risk_case", riskCaseId, riskCaseId,
-            "Unblocked target: " + targetId, AuditLogEntity.AuditResult.SUCCESS,
-            unblockedBy, null, null, clientIp, null,
-            Map.of("gameId", gameId, "targetId", targetId, "actionType", "UNBLOCK"));
-    }
-
-    /**
      * 记录安全告警
      */
     public void logSecurityAlert(String gameId, String targetId, String riskLevel, String caseNumber) {
