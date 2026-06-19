@@ -49,15 +49,15 @@ class RiskManagementServiceTest {
         testRule.id = "rule_test123";
         testRule.gameId = "game_test123";
         testRule.environmentId = "env_test123";
-        testRule.ruleName = "Test Rule";
-        testRule.ruleStatus = RiskRuleEntity.RuleStatus.ACTIVE;
+        testRule.name = "Test Rule";
+        testRule.status = RiskRuleEntity.RuleStatus.ACTIVE;
         testRule.testMode = false;
         testRule.riskLevel = RiskRuleEntity.RiskLevel.HIGH;
         testRule.riskScore = 80;
         testRule.actionType = RiskRuleEntity.ActionType.BLOCK;
         testRule.enableAutoBlock = true;
-        testRule.triggerCount = 0L;
-        testRule.blockCount = 0L;
+        testRule.totalTriggeredCount = 0L;
+        testRule.totalBlockedCount = 0L;
         testRule.createdAt = LocalDateTime.now();
 
         testCase = new RiskCaseEntity();
