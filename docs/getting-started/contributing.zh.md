@@ -15,7 +15,7 @@
 - Flink：在本地 withIntegration=skip 组装；关键函数单测
 
 分支策略
-- main 稳定；feature/<topic> 开发；release/<ver> 发布
+- main 稳定；`feature/<topic>` 开发；`release/<ver>` 发布
 
 安全与秘密
 - 不提交密钥；使用环境变量或密钥管理
