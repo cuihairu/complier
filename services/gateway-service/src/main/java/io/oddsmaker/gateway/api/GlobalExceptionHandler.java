@@ -1,6 +1,7 @@
 package io.oddsmaker.gateway.api;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,10 +15,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<Map<String,Object>> handleRSE(ResponseStatusException ex, ServerWebExchange exchange) {
         String rid = (String) exchange.getAttributes().getOrDefault("x-request-id", "");
-        return ResponseEntity.status(ex.getStatusCode())
+        HttpStatusCode statusCode = ex.getStatusCode();
+        return ResponseEntity.status(statusCode)
                 .body(Map.of(
-                        "code", toCode(ex.getStatusCode()),
-                        "message", ex.getReason() == null ? ex.getStatusCode().toString() : ex.getReason(),
+                        "code", toCode(statusCode),
+                        "message", ex.getReason() == null ? statusCode.toString() : ex.getReason(),
                         "request_id", rid
                 ));
     }
@@ -33,12 +35,13 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    private String toCode(HttpStatus status) {
-        if (status == HttpStatus.PAYLOAD_TOO_LARGE) return "payload_too_large";
-        if (status == HttpStatus.TOO_MANY_REQUESTS) return "too_many_requests";
-        if (status == HttpStatus.UNAUTHORIZED) return "unauthorized";
-        if (status == HttpStatus.FORBIDDEN) return "forbidden";
-        if (status == HttpStatus.BAD_REQUEST) return "bad_request";
-        return status.name().toLowerCase();
+    private String toCode(HttpStatusCode status) {
+        int value = status.value();
+        if (value == 413) return "payload_too_large";
+        if (value == 429) return "too_many_requests";
+        if (value == 401) return "unauthorized";
+        if (value == 403) return "forbidden";
+        if (value == 400) return "bad_request";
+        return status.toString().toLowerCase();
     }
 }
