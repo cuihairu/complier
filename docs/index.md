@@ -14,22 +14,28 @@ hero:
       link: /reference/
 
 features:
-  - icon: 🎮
+  - icon:
+      src: /icons/architecture.svg
     title: Multi-Game Architecture
     details: Support for multiple games with isolated environments and configurations
-  - icon: 📊
+  - icon:
+      src: /icons/analytics.svg
     title: Real-time Analytics
     details: Kafka + Flink + ClickHouse data pipeline for real-time event processing
-  - icon: 🛡️
+  - icon:
+      src: /icons/shield.svg
     title: Risk Control
     details: Comprehensive risk management with real-time evaluation and blocking
-  - icon: 🧪
+  - icon:
+      src: /icons/experiment.svg
     title: A/B Testing
     details: Built-in experiment platform with statistical analysis
-  - icon: 🤖
+  - icon:
+      src: /icons/ml.svg
     title: Machine Learning
     details: ML model management with training, deployment, and A/B testing
-  - icon: 🔐
+  - icon:
+      src: /icons/security.svg
     title: Enterprise Security
     details: MFA, SSO, RBAC, and comprehensive audit logging
 ---
@@ -64,22 +70,22 @@ graph TB
 
 ## Key Features
 
-### 🎮 Multi-Game Support
+### Multi-Game Support
 Manage multiple games with isolated environments, API keys, and configurations.
 
-### 📊 Real-time Processing
+### Real-time Processing
 Process millions of events per second with Kafka + Flink + ClickHouse pipeline.
 
-### 🛡️ Risk Control
+### Risk Control
 Detect and prevent cheating, payment fraud, and other suspicious activities.
 
-### 🧪 A/B Testing
+### A/B Testing
 Run experiments with statistical significance testing and SRM detection.
 
-### 🤖 Machine Learning
+### Machine Learning
 Deploy and manage ML models for predictions and anomaly detection.
 
-### 🔐 Enterprise Security
+### Enterprise Security
 MFA, SSO, RBAC, audit logging, and compliance features.
 
 ## Documentation
