@@ -863,8 +863,7 @@ public class MLModelService {
         List<ModelTrainingEntity> timedOut = modelTrainingRepo.findTimedOutJobs(threshold);
 
         for (ModelTrainingEntity training : timedOut) {
-            training.timeout();
-            training.errorMessage = "Training job timed out after 24 hours";
+            training.fail("Training job timed out after 24 hours");
             modelTrainingRepo.save(training);
 
             // 更新模型状态

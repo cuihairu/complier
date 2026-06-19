@@ -289,17 +289,19 @@ public class RiskDashboardService {
 
         return cases.stream()
             .limit(limit)
-            .map(c -> Map.of(
-                "caseId", c.id,
-                "caseNumber", c.caseNumber,
-                "targetType", c.targetType,
-                "targetId", c.targetId,
-                "riskLevel", c.riskLevel.name(),
-                "actionTaken", c.actionTaken.name(),
-                "status", c.executionStatus.name(),
-                "createdAt", c.createdAt,
-                "reviewStatus", c.reviewStatus != null ? c.reviewStatus : "none"
-            ))
+            .map(c -> {
+                Map<String, Object> result = new java.util.HashMap<>();
+                result.put("caseId", c.id);
+                result.put("caseNumber", c.caseNumber);
+                result.put("targetType", c.targetType);
+                result.put("targetId", c.targetId);
+                result.put("riskLevel", c.riskLevel.name());
+                result.put("actionTaken", c.actionTaken.name());
+                result.put("status", c.executionStatus.name());
+                result.put("createdAt", c.createdAt);
+                result.put("reviewStatus", c.reviewStatus != null ? c.reviewStatus : "none");
+                return result;
+            })
             .collect(Collectors.toList());
     }
 

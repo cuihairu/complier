@@ -182,8 +182,8 @@ public class RateLimitPolicyEntity {
 
     public long getLimitPerDay() {
         if (eventsPerDay != null) return eventsPerDay;
-        if (eventsPerHour != null) return eventsPerHour * 24;
-        if (eventsPerMinute != null) return eventsPerMinute * 1440;
+        if (eventsPerMinute != null) return eventsPerMinute * 1440L;
+        if (eventsPerSecond != null) return eventsPerSecond * 86400L;
         return Long.MAX_VALUE;
     }
 

@@ -105,9 +105,6 @@ public class SecurityConfig {
                 .permissionsPolicy(permissions -> permissions
                     .policy("geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"))
 
-                // 缓存控制
-                .cacheControl(cache -> {})
-
                 // Frame选项
                 .frameOptions(frame -> frame.deny())
 

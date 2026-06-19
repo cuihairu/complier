@@ -379,7 +379,7 @@ public class UserService {
 
         if (gameId != null) {
             GameEntity game = gameRepo.findById(gameId)
-                .filter(game -> game.deletedAt == null)
+                .filter(g -> g.deletedAt == null)
                 .orElseThrow(() -> new IllegalArgumentException("Game not found: " + gameId));
 
             if (environmentId != null) {

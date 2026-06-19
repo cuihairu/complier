@@ -68,9 +68,9 @@ public class RiskManagementService {
         riskCase.caseNumber = generateCaseNumber();
         riskCase.targetType = targetType;
         riskCase.targetId = targetId;
-        riskCase.riskLevel = rule.riskLevel;
+        riskCase.riskLevel = RiskCaseEntity.RiskLevel.valueOf(rule.riskLevel.name());
         riskCase.riskScore = rule.riskScore;
-        riskCase.actionTaken = rule.actionType;
+        riskCase.actionTaken = RiskCaseEntity.ActionType.valueOf(rule.actionType.name());
         riskCase.executionStatus = RiskCaseEntity.ExecutionStatus.PENDING;
         riskCase.createdAt = LocalDateTime.now();
 
