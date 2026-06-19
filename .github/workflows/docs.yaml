@@ -7,12 +7,17 @@ on:
       - main
     paths:
       - 'docs/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/docs.yaml'
   pull_request:
     branches:
       - main
     paths:
       - 'docs/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/docs.yaml'
 
 permissions:
   contents: read
@@ -35,7 +40,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '22'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -43,6 +48,7 @@ jobs:
           version: 9
 
       - name: Get pnpm store directory
+        id: pnpm-cache
         shell: bash
         run: echo "store-path=$(pnpm store path --silent)" >> $GITHUB_OUTPUT
 
@@ -55,7 +61,7 @@ jobs:
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Build documentation
         run: pnpm docs:build
