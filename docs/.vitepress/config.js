@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   // Base path for GitHub Pages
   base: '/oddsmaker/',
 
@@ -93,4 +94,4 @@ export default defineConfig({
       provider: 'local'
     }
   }
-})
+}))
