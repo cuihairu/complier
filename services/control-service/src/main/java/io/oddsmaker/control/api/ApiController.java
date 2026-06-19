@@ -8,6 +8,13 @@ import io.oddsmaker.control.dto.StorageProfileDTO;
 import io.oddsmaker.control.service.ExperimentService;
 import io.oddsmaker.control.service.GameService;
 import io.oddsmaker.control.service.StorageProfileService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -23,6 +30,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api")
+@Tag(name = "Core API", description = "核心API接口 - 游戏、环境、API Key管理")
 public class ApiController {
     private final ControlService svc;
     private final GameService gameService;
@@ -121,7 +129,13 @@ public class ApiController {
     }
 
     @GetMapping("/games")
-    public Object listGames(@RequestParam(value = "q", required = false) String q,
+    @Operation(summary = "获取游戏列表", description = "分页获取游戏列表，支持搜索")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功获取游戏列表",
+            content = @Content(schema = @Schema(implementation = GameDTO.class))),
+        @ApiResponse(responseCode = "401", description = "未授权")
+    })
+    public Object listGames(@Parameter(description = "搜索关键词") @RequestParam(value = "q", required = false) String q,
                             @RequestParam(value = "page", required = false) Integer page,
                             @RequestParam(value = "size", required = false) Integer size,
                             @RequestParam(value = "sort", required = false) String sort) {
@@ -136,12 +150,26 @@ public class ApiController {
     }
 
     @PostMapping("/games")
+    @Operation(summary = "创建游戏", description = "创建新的游戏产品")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "游戏创建成功",
+            content = @Content(schema = @Schema(implementation = GameDTO.class))),
+        @ApiResponse(responseCode = "400", description = "请求参数无效"),
+        @ApiResponse(responseCode = "401", description = "未授权"),
+        @ApiResponse(responseCode = "409", description = "游戏ID已存在")
+    })
     public GameDTO createGame(@Valid @RequestBody GameDTO dto) {
         return gameService.createGame(dto);
     }
 
     @GetMapping("/games/{gameId}")
-    public ResponseEntity<GameDTO> getGame(@PathVariable String gameId) {
+    @Operation(summary = "获取游戏详情", description = "根据游戏ID获取游戏详细信息")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "成功获取游戏详情",
+            content = @Content(schema = @Schema(implementation = GameDTO.class))),
+        @ApiResponse(responseCode = "404", description = "游戏不存在")
+    })
+    public ResponseEntity<GameDTO> getGame(@Parameter(description = "游戏ID") @PathVariable String gameId) {
         return gameService.getGame(gameId)
             .map(ResponseEntity::ok)
             .orElseGet(() -> ResponseEntity.notFound().build());

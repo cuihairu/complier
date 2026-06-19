@@ -1,0 +1,425 @@
+package io.oddsmaker.control.service;
+
+import io.oddsmaker.control.jpa.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.stream.Collectors;
+
+/**
+ * 安全服务
+ * 管理MFA、SSO和安全会话
+ */
+@Service
+@Transactional
+public class SecurityService {
+
+    private static final Logger logger = LoggerFactory.getLogger(SecurityService.class);
+
+    @Autowired
+    private MFAConfigRepo mfaConfigRepo;
+
+    @Autowired
+    private SSOConfigRepo ssoConfigRepo;
+
+    @Autowired
+    private SecuritySessionRepo securitySessionRepo;
+
+    @Autowired
+    private SecurityPolicyRepo securityPolicyRepo;
+
+    @Autowired
+    private AuditLogService auditLogService;
+
+    // ============== MFA Methods ==============
+
+    /**
+     * 为用户启用MFA
+     */
+    public MFAConfigEntity enableMFA(String userId, MFAConfigEntity.MFAMethod method,
+                                     String phoneNumber, String emailAddress) {
+        // 检查是否已存在相同方法
+        Optional<MFAConfigEntity> existing = mfaConfigRepo.findByUserIdAndMethod(userId, method);
+        if (existing.isPresent() && existing.get().isEnabled()) {
+            throw new IllegalStateException("MFA method already enabled: " + method);
+        }
+
+        MFAConfigEntity config = new MFAConfigEntity();
+        config.id = "mfa_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        config.userId = userId;
+        config.mfaMethod = method;
+        config.phoneNumber = phoneNumber;
+        config.emailAddress = emailAddress;
+        config.mfaStatus = MFAConfigEntity.MFAStatus.PENDING;
+
+        if (method == MFAConfigEntity.MFAMethod.TOTP) {
+            // 生成TOTP密钥
+            config.secretKey = generateTOTPSecret();
+            config.qrCodeUrl = generateQRCodeUrl(config.secretKey, userId);
+        }
+
+        config = mfaConfigRepo.save(config);
+
+        logger.info("Initiated MFA setup for user: {} with method: {}", userId, method);
+        return config;
+    }
+
+    /**
+     * 验证并激活MFA
+     */
+    public MFAConfigEntity verifyAndActivateMFA(String configId, String code) {
+        MFAConfigEntity config = mfaConfigRepo.findById(configId)
+            .orElseThrow(() -> new IllegalArgumentException("MFA config not found: " + configId));
+
+        if (!config.isPending()) {
+            throw new IllegalStateException("MFA config is not pending: " + config.mfaStatus);
+        }
+
+        boolean isValid = verifyMFACode(config, code);
+
+        if (isValid) {
+            config.enable();
+
+            // 检查是否为主要方法（用户的第一个MFA）
+            List<MFAConfigEntity> userConfigs = mfaConfigRepo.findByUserId(config.userId);
+            if (userConfigs.stream().noneMatch(MFAConfigEntity::isPrimary)) {
+                config.markAsPrimary();
+            }
+
+            config = mfaConfigRepo.save(config);
+
+            // 记录审计日志
+            auditLogService.logCreate("mfa_config", config.id, config.mfaMethod.name(), config.userId, null, null, null);
+
+            logger.info("MFA enabled for user: {} with method: {}", config.userId, config.mfaMethod);
+        } else {
+            config.recordFailedVerification();
+            mfaConfigRepo.save(config);
+
+            if (config.hasExceededAttempts()) {
+                config.lock();
+                mfaConfigRepo.save(config);
+                logger.warn("MFA config locked due to failed attempts: {}", configId);
+            }
+
+            throw new IllegalArgumentException("Invalid MFA code");
+        }
+
+        return config;
+    }
+
+    /**
+     * 禁用MFA
+     */
+    public void disableMFA(String configId, String userId) {
+        MFAConfigEntity config = mfaConfigRepo.findById(configId)
+            .orElseThrow(() -> new IllegalArgumentException("MFA config not found: " + configId));
+
+        if (!config.userId.equals(userId)) {
+            throw new IllegalArgumentException("MFA config does not belong to user");
+        }
+
+        config.disable();
+        mfaConfigRepo.save(config);
+
+        // 记录审计日志
+        auditLogService.logDelete("mfa_config", configId, config.mfaMethod.name(), userId, null, null);
+
+        logger.info("MFA disabled for user: {} method: {}", userId, config.mfaMethod);
+    }
+
+    /**
+     * 验证MFA代码
+     */
+    public boolean verifyMFA(String userId, String code) {
+        List<MFAConfigEntity> configs = mfaConfigRepo.findEnabledByUserId(userId);
+
+        for (MFAConfigEntity config : configs) {
+            if (verifyMFACode(config, code)) {
+                config.recordVerification();
+                config.lastUsedAt = LocalDateTime.now();
+                mfaConfigRepo.save(config);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * 检查用户是否启用了MFA
+     */
+    @Transactional(readOnly = true)
+    public boolean isUserMFAEnabled(String userId) {
+        return mfaConfigRepo.isMFAEnabledForUser(userId);
+    }
+
+    /**
+     * 获取用户的MFA配置
+     */
+    @Transactional(readOnly = true)
+    public List<MFAConfigEntity> getUserMFAConfigs(String userId) {
+        return mfaConfigRepo.findByUserId(userId);
+    }
+
+    // ============== SSO Methods ==============
+
+    /**
+     * 创建SSO配置
+     */
+    public SSOConfigEntity createSSOConfig(String name, String description,
+                                          SSOConfigEntity.SSOProtocol protocol,
+                                          Map<String, Object> config, String createdBy) {
+        SSOConfigEntity sso = new SSOConfigEntity();
+        sso.id = "sso_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        sso.name = name;
+        sso.description = description;
+        sso.ssoProtocol = protocol;
+        sso.ssoStatus = SSOConfigEntity.SSOStatus.DISABLED;
+        sso.createdBy = createdBy;
+
+        // 根据协议设置配置
+        if (protocol == SSOConfigEntity.SSOProtocol.SAML2) {
+            sso.samlIdpEntityId = (String) config.get("idpEntityId");
+            sso.samlIdpSsoUrl = (String) config.get("idpSsoUrl");
+            sso.samlIdpCert = (String) config.get("idpCert");
+            sso.samlSpEntityId = (String) config.get("spEntityId");
+            sso.samlAcsUrl = (String) config.get("acsUrl");
+        } else if (protocol == SSOConfigEntity.SSOProtocol.OAUTH2 || protocol == SSOConfigEntity.SSOProtocol.OIDC) {
+            sso.oauthProvider = (String) config.get("provider");
+            sso.oauthClientId = (String) config.get("clientId");
+            sso.oauthClientSecret = (String) config.get("clientSecret");
+            sso.oauthAuthorizationUrl = (String) config.get("authorizationUrl");
+            sso.oauthTokenUrl = (String) config.get("tokenUrl");
+            sso.oauthScopes = (String) config.get("scopes");
+            sso.oauthCallbackUrl = (String) config.get("callbackUrl");
+        }
+
+        sso = ssoConfigRepo.save(sso);
+
+        // 记录审计日志
+        auditLogService.logCreate("sso_config", sso.id, name, createdBy, createdBy, null,
+            Map.of("protocol", protocol));
+
+        logger.info("Created SSO config: {} - {}", sso.id, name);
+        return sso;
+    }
+
+    /**
+     * 激活SSO配置
+     */
+    public SSOConfigEntity activateSSO(String configId) {
+        SSOConfigEntity sso = ssoConfigRepo.findById(configId)
+            .orElseThrow(() -> new IllegalArgumentException("SSO config not found: " + configId));
+
+        sso.activate();
+        return ssoConfigRepo.save(sso);
+    }
+
+    /**
+     * 获取活跃的SSO配置
+     */
+    @Transactional(readOnly = true)
+    public List<SSOConfigEntity> getActiveSSOConfigs() {
+        return ssoConfigRepo.findActive();
+    }
+
+    // ============== Security Session Methods ==============
+
+    /**
+     * 创建会话
+     */
+    public SecuritySessionEntity createSession(String userId, SecuritySessionEntity.AuthMethod authMethod,
+                                              String ipAddress, String userAgent, int timeoutMinutes) {
+        SecuritySessionEntity session = new SecuritySessionEntity();
+        session.id = "sess_" + UUID.randomUUID().toString().replace("-", "").substring(0, 24);
+        session.userId = userId;
+        session.sessionToken = generateSessionToken();
+        session.sessionStatus = SecuritySessionEntity.SessionStatus.ACTIVE;
+        session.authMethod = authMethod;
+        session.ipAddress = ipAddress;
+        session.userAgent = userAgent;
+        session.loginAt = LocalDateTime.now();
+        session.lastActivityAt = LocalDateTime.now();
+        session.expiresAt = LocalDateTime.now().plusMinutes(timeoutMinutes);
+        session.deviceFingerprint = generateDeviceFingerprint(userAgent, ipAddress);
+
+        session = securitySessionRepo.save(session);
+
+        logger.info("Created session for user: {} from IP: {}", userId, ipAddress);
+        return session;
+    }
+
+    /**
+     * 获取会话
+     */
+    @Transactional(readOnly = true)
+    public SecuritySessionEntity getSession(String token) {
+        return securitySessionRepo.findByToken(token)
+            .orElse(null);
+    }
+
+    /**
+     * 验证会话
+     */
+    public SecuritySessionEntity validateSession(String token) {
+        SecuritySessionEntity session = getSession(token);
+        if (session == null || !session.isActive()) {
+            return null;
+        }
+
+        session.updateActivity();
+        return securitySessionRepo.save(session);
+    }
+
+    /**
+     * 终止会话
+     */
+    public void terminateSession(String sessionId, String terminatedBy, String reason) {
+        SecuritySessionEntity session = securitySessionRepo.findById(sessionId)
+            .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+
+        session.terminate(terminatedBy, reason);
+        securitySessionRepo.save(session);
+
+        logger.info("Terminated session: {} by: {} reason: {}", sessionId, terminatedBy, reason);
+    }
+
+    /**
+     * 终止用户的所有会话
+     */
+    public void terminateAllUserSessions(String userId, String terminatedBy, String reason) {
+        List<SecuritySessionEntity> sessions = securitySessionRepo.findActiveByUserId(userId);
+
+        for (SecuritySessionEntity session : sessions) {
+            session.terminate(terminatedBy, reason);
+            securitySessionRepo.save(session);
+        }
+
+        logger.info("Terminated all {} sessions for user: {}", sessions.size(), userId);
+    }
+
+    // ============== Security Policy Methods ==============
+
+    /**
+     * 获取密码策略
+     */
+    @Transactional(readOnly = true)
+    public List<SecurityPolicyEntity> getPasswordPolicies(String gameId) {
+        return securityPolicyRepo.findPasswordPolicyForGame(gameId);
+    }
+
+    /**
+     * 获取会话策略
+     */
+    @Transactional(readOnly = true)
+    public List<SecurityPolicyEntity> getSessionPolicies(String gameId) {
+        return securityPolicyRepo.findSessionPolicyForGame(gameId);
+    }
+
+    /**
+     * 获取MFA策略
+     */
+    @Transactional(readOnly = true)
+    public List<SecurityPolicyEntity> getMFAPolicies(String gameId) {
+        return securityPolicyRepo.findMFAPolicyForGame(gameId);
+    }
+
+    /**
+     * 检查游戏是否需要MFA
+     */
+    @Transactional(readOnly = true)
+    public boolean isMFARequired(String gameId) {
+        return securityPolicyRepo.isMFARequiredForGame(gameId);
+    }
+
+    // ============== Scheduled Tasks ==============
+
+    /**
+     * 定期清理过期会话
+     */
+    @Scheduled(fixedDelay = 300000)  // 每5分钟执行一次
+    public void cleanupExpiredSessions() {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+
+            // 清理过期会话
+            List<SecuritySessionEntity> expired = securitySessionRepo.findExpired(now);
+            for (SecuritySessionEntity session : expired) {
+                session.sessionStatus = SecuritySessionEntity.SessionStatus.EXPIRED;
+                securitySessionRepo.save(session);
+            }
+
+            // 清理空闲超时会话
+            LocalDateTime idleSince = now.minusMinutes(15);  // 默认15分钟空闲超时
+            List<SecuritySessionEntity> idleSessions = securitySessionRepo.findIdleExpired(idleSince);
+            for (SecuritySessionEntity session : idleSessions) {
+                session.revoke("Idle timeout");
+                securitySessionRepo.save(session);
+            }
+
+            if (!expired.isEmpty() || !idleSessions.isEmpty()) {
+                logger.debug("Cleaned up {} expired and {} idle sessions", expired.size(), idleSessions.size());
+            }
+        } catch (Exception e) {
+            logger.error("Failed to cleanup expired sessions", e);
+        }
+    }
+
+    /**
+     * 定期删除很久以前过期的会话
+     */
+    @Scheduled(cron = "0 0 4 * * ?")  // 每天凌晨4点执行
+    public void deleteOldSessions() {
+        try {
+            LocalDateTime expireBefore = LocalDateTime.now().minusDays(30);
+            int deleted = securitySessionRepo.deleteExpired(expireBefore);
+
+            if (deleted > 0) {
+                logger.info("Deleted {} old sessions", deleted);
+            }
+        } catch (Exception e) {
+            logger.error("Failed to delete old sessions", e);
+        }
+    }
+
+    // 私有辅助方法
+
+    private String generateTOTPSecret() {
+        // 模拟生成TOTP密钥（实际应使用加密库）
+        return UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+    }
+
+    private String generateQRCodeUrl(String secret, String userId) {
+        // 模拟生成二维码URL
+        return String.format("otpauth://totp/Oddsmaker:%s?secret=%s&issuer=Oddsmaker", userId, secret);
+    }
+
+    private boolean verifyMFACode(MFAConfigEntity config, String code) {
+        // 模拟验证MFA代码（实际应根据方法类型实现）
+        if (config.mfaMethod == MFAConfigEntity.MFAMethod.TOTP) {
+            // TOTP验证（模拟）
+            return code != null && code.length() == 6 && code.matches("\\d{6}");
+        } else if (config.mfaMethod == MFAConfigEntity.MFAMethod.SMS || config.mfaMethod == MFAConfigEntity.MFAMethod.EMAIL) {
+            // 验证码验证（模拟）
+            return code != null && code.length() == 6 && code.matches("\\d{6}");
+        }
+        return false;
+    }
+
+    private String generateSessionToken() {
+        return UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private String generateDeviceFingerprint(String userAgent, String ipAddress) {
+        // 模拟生成设备指纹
+        String normalizedUA = userAgent != null ? userAgent.replaceAll("\\s+", "") : "";
+        return Integer.toHexString((normalizedUA + ipAddress).hashCode());
+    }
+}

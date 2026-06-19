@@ -1,0 +1,257 @@
+# Oddsmaker Control Service - Kubernetes Deployment
+# This file contains all necessary Kubernetes resources for the control service
+
+---
+# ConfigMap for non-sensitive configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oddsmaker-control-config
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  SERVER_PORT: "8085"
+  MANAGEMENT_SERVER_PORT: "8086"
+  SPRING_JPA_HIBERNATE_DDL_AUTO: "validate"
+  SPRING_FLYWAY_ENABLED: "true"
+  SPRING_FLYWAY_LOCATIONS: "classpath:db/migration"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
+  CLICKHOUSE_URL: "jdbc:clickhouse://clickhouse:8123/oddsmaker"
+  ODDSMAKER_COMPANY_NAME: "Oddsmaker"
+  LOGGING_LEVEL_ROOT: "INFO"
+  LOGGING_LEVEL_IO_ODDSMAKER: "DEBUG"
+
+---
+# Secret for sensitive configuration
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oddsmaker-control-secrets
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+type: Opaque
+stringData:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/oddsmaker"
+  SPRING_DATASOURCE_USERNAME: "oddsmaker"
+  SPRING_DATASOURCE_PASSWORD: "CHANGE_ME_IN_PRODUCTION"
+  SPRING_REDIS_PASSWORD: "CHANGE_ME_IN_PRODUCTION"
+  CLICKHOUSE_USER: "oddsmaker"
+  CLICKHOUSE_PASSWORD: "CHANGE_ME_IN_PRODUCTION"
+  ADMIN_TOKEN: "CHANGE_ME_IN_PRODUCTION"
+  JWT_SECRET: "CHANGE_ME_IN_PRODUCTION_MIN_32_CHARS"
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oddsmaker-control
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: oddsmaker-control
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: oddsmaker-control
+        component: control-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8086"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      serviceAccountName: oddsmaker-control
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: control-service
+          image: oddsmaker/control-service:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8085
+              protocol: TCP
+            - name: management
+              containerPort: 8086
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: oddsmaker-control-config
+            - secretRef:
+                name: oddsmaker-control-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: management
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          volumeMounts:
+            - name: logs
+              mountPath: /app/logs
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: logs
+          emptyDir: {}
+        - name: data
+          emptyDir: {}
+      terminationGracePeriodSeconds: 30
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: oddsmaker-control
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+    - name: management
+      port: 8086
+      targetPort: management
+      protocol: TCP
+  selector:
+    app: oddsmaker-control
+
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oddsmaker-control
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - control.oddsmaker.local
+      secretName: oddsmaker-control-tls
+  rules:
+    - host: control.oddsmaker.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oddsmaker-control
+                port:
+                  name: http
+
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oddsmaker-control
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+
+---
+# HorizontalPodAutoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: oddsmaker-control
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: oddsmaker-control
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: oddsmaker-control
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-control
+    component: control-service
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: oddsmaker-control

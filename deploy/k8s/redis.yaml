@@ -1,0 +1,124 @@
+# Redis Deployment for Oddsmaker
+---
+# PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oddsmaker-redis-pvc
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-redis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: standard
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oddsmaker-redis
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-redis
+    component: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oddsmaker-redis
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: oddsmaker-redis
+        component: cache
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          command: ["redis-server", "--appendonly", "yes", "--requirepass", "$(REDIS_PASSWORD)"]
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oddsmaker-redis-secrets
+                  key: password
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - -a
+                - $(REDIS_PASSWORD)
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data
+      volumes:
+        - name: redis-storage
+          persistentVolumeClaim:
+            claimName: oddsmaker-redis-pvc
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: oddsmaker-redis
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-redis
+    component: cache
+spec:
+  type: ClusterIP
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis
+      protocol: TCP
+  selector:
+    app: oddsmaker-redis
+
+---
+# Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oddsmaker-redis-secrets
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-redis
+type: Opaque
+stringData:
+  password: "CHANGE_ME_IN_PRODUCTION"

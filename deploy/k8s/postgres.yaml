@@ -1,0 +1,154 @@
+# PostgreSQL Deployment for Oddsmaker
+---
+# PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: oddsmaker-postgres-pvc
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oddsmaker-postgres
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-postgres
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oddsmaker-postgres
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: oddsmaker-postgres
+        component: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: "oddsmaker"
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: oddsmaker-postgres-secrets
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: oddsmaker-postgres-secrets
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - oddsmaker
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - oddsmaker
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: postgres-storage
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: postgres-storage
+          persistentVolumeClaim:
+            claimName: oddsmaker-postgres-pvc
+        - name: init-scripts
+          configMap:
+            name: oddsmaker-postgres-init
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: oddsmaker-postgres
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-postgres
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+  selector:
+    app: oddsmaker-postgres
+
+---
+# Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oddsmaker-postgres-secrets
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-postgres
+type: Opaque
+stringData:
+  username: "oddsmaker"
+  password: "CHANGE_ME_IN_PRODUCTION"
+
+---
+# ConfigMap for init scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oddsmaker-postgres-init
+  namespace: oddsmaker
+  labels:
+    app: oddsmaker-postgres
+data:
+  01-init.sql: |
+    -- Create extensions
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+    -- Grant permissions
+    GRANT ALL PRIVILEGES ON DATABASE oddsmaker TO oddsmaker;

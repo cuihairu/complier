@@ -1,0 +1,9 @@
+# Oddsmaker Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oddsmaker
+  labels:
+    app.kubernetes.io/name: oddsmaker
+    app.kubernetes.io/part-of: oddsmaker
+    app.kubernetes.io/managed-by: kubectl

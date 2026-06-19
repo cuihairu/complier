@@ -1,0 +1,199 @@
+# Oddsmaker Gaming Analytics Platform - Docker Compose
+# Local development environment
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: oddsmaker-postgres
+    environment:
+      POSTGRES_DB: oddsmaker
+      POSTGRES_USER: oddsmaker
+      POSTGRES_PASSWORD: oddsmaker_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./services/control-service/src/main/resources/db/migration:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oddsmaker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oddsmaker-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: oddsmaker-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oddsmaker-network
+
+  # Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: oddsmaker-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - oddsmaker-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: oddsmaker-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oddsmaker-network
+
+  # ClickHouse
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3-alpine
+    container_name: oddsmaker-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: oddsmaker
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: oddsmaker_dev_password
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oddsmaker-network
+
+  # Control Service
+  control-service:
+    build:
+      context: .
+      dockerfile: services/control-service/Dockerfile
+    container_name: oddsmaker-control-service
+    ports:
+      - "8085:8085"
+      - "8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/oddsmaker
+      SPRING_DATASOURCE_USERNAME: oddsmaker
+      SPRING_DATASOURCE_PASSWORD: oddsmaker_dev_password
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      CLICKHOUSE_URL: jdbc:clickhouse://clickhouse:8123/oddsmaker
+      CLICKHOUSE_USER: oddsmaker
+      CLICKHOUSE_PASSWORD: oddsmaker_dev_password
+      ODDSMAKER_COMPANY_NAME: "Oddsmaker Dev"
+      ODDSMAKER_DEPLOYMENT_ID: "dev-local"
+      ADMIN_TOKEN: "dev-admin-token-change-in-production"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8086/actuator/health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 60s
+      retries: 3
+    networks:
+      - oddsmaker-network
+
+  # Flink Job Manager
+  flink-jobmanager:
+    image: flink:1.18.1-scala_2.12-java17
+    container_name: oddsmaker-flink-jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      FLINK_PROPERTIES_JOBMANAGER_RPC_ADDRESS: flink-jobmanager
+    volumes:
+      - flink_data:/opt/flink/data
+    networks:
+      - oddsmaker-network
+
+  # Flink Task Manager
+  flink-taskmanager:
+    image: flink:1.18.1-scala_2.12-java17
+    container_name: oddsmaker-flink-taskmanager
+    depends_on:
+      - flink-jobmanager
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES_JOBMANAGER_RPC_ADDRESS: flink-jobmanager
+      FLINK_PROPERTIES_TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
+    networks:
+      - oddsmaker-network
+
+  # Superset (optional - for dashboards)
+  superset:
+    image: apache/superset:3.1.0
+    container_name: oddsmaker-superset
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_SECRET_KEY: "superset-secret-key-change-in-production"
+      ADMIN_USERNAME: admin
+      ADMIN_PASSWORD: admin
+      ADMIN_FIRST_NAME: Admin
+      ADMIN_LAST_NAME: User
+      ADMIN_EMAIL: admin@oddsmaker.local
+    volumes:
+      - superset_data:/app/superset_home
+    networks:
+      - oddsmaker-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  flink_data:
+    driver: local
+  superset_data:
+    driver: local
+
+networks:
+  oddsmaker-network:
+    driver: bridge

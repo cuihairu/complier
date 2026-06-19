@@ -1,0 +1,61 @@
+package io.oddsmaker.control.jpa;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Repository
+public interface MaintenanceWindowRepo extends JpaRepository<MaintenanceWindowEntity, String> {
+
+    /**
+     * 查找活跃的维护窗口
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'IN_PROGRESS' AND mw.deletedAt IS NULL ORDER BY mw.scheduledStart DESC")
+    List<MaintenanceWindowEntity> findActive();
+
+    /**
+     * 查找待开始的维护窗口
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'PENDING' AND mw.scheduledStart <= :now AND mw.deletedAt IS NULL ORDER BY mw.scheduledStart ASC")
+    List<MaintenanceWindowEntity> findPending(@Param("now") LocalDateTime now);
+
+    /**
+     * 查找应该结束的维护窗口
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'IN_PROGRESS' AND mw.scheduledEnd <= :now AND mw.deletedAt IS NULL")
+    List<MaintenanceWindowEntity> findShouldEnd(@Param("now") LocalDateTime now);
+
+    /**
+     * 查找超期的维护窗口
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = 'IN_PROGRESS' AND mw.scheduledEnd < :now AND mw.deletedAt IS NULL")
+    List<MaintenanceWindowEntity> findOverdue(@Param("now") LocalDateTime now);
+
+    /**
+     * 查找即将到来的维护
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus IN ('SCHEDULED', 'PENDING') AND mw.scheduledStart > :now AND mw.deletedAt IS NULL ORDER BY mw.scheduledStart ASC")
+    List<MaintenanceWindowEntity> findUpcoming(@Param("now") LocalDateTime now);
+
+    /**
+     * 查找影响游戏的维护
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE (mw.impactScope = 'GLOBAL' OR mw.gameId = :gameId) AND mw.deletedAt IS NULL ORDER BY mw.scheduledStart DESC")
+    List<MaintenanceWindowEntity> findAffectingGame(@Param("gameId") String gameId);
+
+    /**
+     * 查找紧急维护
+     */
+    @Query("SELECT mw FROM MaintenanceWindowEntity mw WHERE mw.maintenanceType = 'EMERGENCY' AND mw.deletedAt IS NULL ORDER BY mw.createdAt DESC")
+    List<MaintenanceWindowEntity> findEmergency();
+
+    /**
+     * 统计维护状态
+     */
+    @Query("SELECT COUNT(mw) FROM MaintenanceWindowEntity mw WHERE mw.maintenanceStatus = :status AND mw.deletedAt IS NULL")
+    long countByStatus(@Param("status") MaintenanceWindowEntity.MaintenanceStatus status);
+}

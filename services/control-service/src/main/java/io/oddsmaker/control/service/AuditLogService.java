@@ -161,6 +161,139 @@ public class AuditLogService {
     }
 
     /**
+     * 记录安全事件
+     */
+    public void logSecurityEvent(String eventType, String description, String userId, String userName, String clientIp, String userAgent, Map<String, Object> details) {
+        AuditLogEntity log = new AuditLogEntity();
+        log.id = "al_sec_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        log.action = AuditLogEntity.AuditAction.SECURITY_EVENT;
+        log.resourceType = "security";
+        log.resourceId = eventType;
+        log.resourceName = eventType;
+        log.actionDescription = description;
+        log.result = AuditLogEntity.AuditResult.SUCCESS;
+        log.userId = userId;
+        log.userName = userName;
+        log.clientIp = clientIp;
+        log.userAgent = userAgent;
+        log.createdAt = LocalDateTime.now();
+
+        if (retentionDays > 0) {
+            log.expireAt = LocalDateTime.now().plusDays(retentionDays);
+        }
+
+        if (details != null && !details.isEmpty()) {
+            try {
+                log.changes = objectMapper.writeValueAsString(details);
+            } catch (Exception e) {
+                logger.warn("Failed to serialize security event details", e);
+                log.changes = "{}";
+            }
+        }
+
+        auditLogRepo.save(log);
+
+        // 安全事件总是需要立即告警
+        sendImmediateAlert(log);
+    }
+
+    /**
+     * 记录可疑活动
+     */
+    public void logSuspiciousActivity(String activityType, String description, String clientIp, String userAgent, Map<String, Object> context) {
+        logSecurityEvent("SUSPICIOUS_" + activityType, description, null, null, clientIp, userAgent, context);
+    }
+
+    /**
+     * 记录暴力破解尝试
+     */
+    public void logBruteForceAttempt(String targetResource, String clientIp, String userAgent, int attemptCount) {
+        logSecurityEvent("BRUTE_FORCE", "Brute force attempt detected on " + targetResource,
+            null, null, clientIp, userAgent,
+            Map.of("targetResource", targetResource, "attemptCount", attemptCount));
+    }
+
+    /**
+     * 记录异常访问模式
+     */
+    public void logAnomalousAccess(String pattern, String description, String clientIp, String userAgent, Map<String, Object> context) {
+        logSecurityEvent("ANOMALOUS_ACCESS", description, null, null, clientIp, userAgent, context);
+    }
+
+    /**
+     * 记录数据泄露尝试
+     */
+    public void logDataExfiltrationAttempt(String resourceType, String resourceId, String userId, String clientIp, String userAgent) {
+        logSecurityEvent("DATA_EXFILTRATION", "Possible data exfiltration attempt on " + resourceType,
+            userId, null, clientIp, userAgent,
+            Map.of("resourceType", resourceType, "resourceId", resourceId));
+    }
+
+    /**
+     * 记录权限提升尝试
+     */
+    public void logPrivilegeEscalationAttempt(String userId, String attemptedAction, String clientIp, String userAgent) {
+        logSecurityEvent("PRIVILEGE_ESCALATION", "Privilege escalation attempt: " + attemptedAction,
+            userId, null, clientIp, userAgent,
+            Map.of("attemptedAction", attemptedAction));
+    }
+
+    /**
+     * 记录配置变更
+     */
+    public void logConfigurationChange(String configType, String configKey, String oldValue, String newValue, String userId, String userName, String clientIp) {
+        logSecurityEvent("CONFIG_CHANGE", "Configuration changed: " + configType + "." + configKey,
+            userId, userName, clientIp, null,
+            Map.of("configType", configType, "configKey", configKey, "oldValue", oldValue, "newValue", newValue));
+    }
+
+    /**
+     * 记录密钥轮换
+     */
+    public void logKeyRotation(String keyType, String keyId, String userId, String userName, String clientIp) {
+        logSecurityEvent("KEY_ROTATION", keyType + " key rotated: " + keyId,
+            userId, userName, clientIp, null,
+            Map.of("keyType", keyType, "keyId", keyId));
+    }
+
+    /**
+     * 解除封禁
+     */
+    public void logUnblock(String gameId, String riskCaseId, String targetId, String unblockedBy, String clientIp) {
+        log(AuditLogEntity.AuditAction.UNBLOCK, "risk_case", riskCaseId, targetId,
+            "Unblocked target: " + targetId, AuditLogEntity.AuditResult.SUCCESS,
+            unblockedBy, null, null, clientIp, null,
+            Map.of("gameId", gameId, "targetId", targetId));
+    }
+
+    /**
+     * 记录集成调用
+     */
+    public void logIntegrationCall(String integrationId, String integrationName, String action, String userId, String userName, String clientIp, Map<String, Object> details) {
+        log(AuditLogEntity.AuditAction.INTEGRATION_CALL, "integration", integrationId, integrationName,
+            action, AuditLogEntity.AuditResult.SUCCESS,
+            userId, userName, null, clientIp, null, details);
+    }
+
+    /**
+     * 记录集成禁用
+     */
+    public void logIntegrationDisable(String integrationId, String integrationName, String userId, String userName, String clientIp, String reason) {
+        log(AuditLogEntity.AuditAction.DISABLE, "integration", integrationId, integrationName,
+            "Integration disabled: " + reason, AuditLogEntity.AuditResult.SUCCESS,
+            userId, userName, null, clientIp, null, Map.of("reason", reason));
+    }
+
+    /**
+     * 记录集成删除
+     */
+    public void logIntegrationDelete(String integrationId, String integrationName, String userId, String userName, String clientIp) {
+        log(AuditLogEntity.AuditAction.DELETE, "integration", integrationId, integrationName,
+            "Integration deleted", AuditLogEntity.AuditResult.SUCCESS,
+            userId, userName, null, clientIp, null, null);
+    }
+
+    /**
      * 发送立即告警
      */
     private void sendImmediateAlert(AuditLogEntity log) {
@@ -253,5 +386,71 @@ public class AuditLogService {
     @Transactional(readOnly = true)
     public long countUserFailedOperations(String userId, LocalDateTime since) {
         return auditLogRepo.countFailedOperationsByUser(userId, since != null ? since : LocalDateTime.now().minusDays(30));
+    }
+
+    /**
+     * 记录封禁操作
+     */
+    public void logBlock(String gameId, String targetType, String targetId, String duration, String userId, String userName, String clientIp) {
+        log(AuditLogEntity.AuditAction.BLOCK, targetType, targetId, targetId,
+            "Blocked target for " + duration, AuditLogEntity.AuditResult.SUCCESS,
+            userId, userName, null, clientIp, null,
+            Map.of("gameId", gameId, "duration", duration, "actionType", "BLOCK"));
+    }
+
+    /**
+     * 记录解除封禁操作
+     */
+    public void logUnblock(String gameId, String riskCaseId, String targetId, String unblockedBy, String clientIp) {
+        log(AuditLogEntity.AuditAction.UNBLOCK, "risk_case", riskCaseId, riskCaseId,
+            "Unblocked target: " + targetId, AuditLogEntity.AuditResult.SUCCESS,
+            unblockedBy, null, null, clientIp, null,
+            Map.of("gameId", gameId, "targetId", targetId, "actionType", "UNBLOCK"));
+    }
+
+    /**
+     * 记录安全告警
+     */
+    public void logSecurityAlert(String gameId, String targetId, String riskLevel, String caseNumber) {
+        log(AuditLogEntity.AuditAction.SECURITY_ALERT, "risk_case", caseNumber, caseNumber,
+            "Security alert - " + riskLevel + " risk", AuditLogEntity.AuditResult.SUCCESS,
+            "system", "Risk Management", null, null, null,
+            Map.of("gameId", gameId, "targetId", targetId, "riskLevel", riskLevel));
+    }
+
+    /**
+     * 记录集成创建
+     */
+    public void logIntegrationCreate(String integrationId, String integrationName, String integrationType, String createdBy, String gameId) {
+        logCreate("integration", integrationId, integrationName, createdBy, createdBy, null,
+            Map.of("integrationType", integrationType, "gameId", gameId));
+    }
+
+    /**
+     * 记录集成调用
+     */
+    public void logIntegrationCall(String integrationId, String eventType, String result, String gameId) {
+        log(AuditLogEntity.AuditAction.INTEGRATION_CALL, "integration", integrationId, integrationId,
+            "Integration call - " + eventType + " - " + result,
+            "SUCCESS".equals(result) ? AuditLogEntity.AuditResult.SUCCESS : AuditLogEntity.AuditResult.FAILURE,
+            "system", "Integration Service", null, null, null,
+            Map.of("eventType", eventType, "result", result, "gameId", gameId));
+    }
+
+    /**
+     * 记录集成禁用
+     */
+    public void logIntegrationDisable(String integrationId, String integrationName, String gameId) {
+        log(AuditLogEntity.AuditAction.DISABLE, "integration", integrationId, integrationName,
+            "Integration disabled", AuditLogEntity.AuditResult.SUCCESS,
+            "system", "Integration Service", null, null, null,
+            Map.of("gameId", gameId));
+    }
+
+    /**
+     * 记录集成删除
+     */
+    public void logIntegrationDelete(String integrationId, String integrationName, String gameId) {
+        logDelete("integration", integrationId, integrationName, "system", "Integration Service", null);
     }
 }

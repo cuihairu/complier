@@ -1,0 +1,211 @@
+# Oddsmaker Alerting Rules
+groups:
+  - name: oddsmaker-control-service
+    rules:
+      # Service availability
+      - alert: OddsmakerControlServiceDown
+        expr: up{job="oddsmaker-control"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: control-service
+        annotations:
+          summary: "Oddsmaker Control Service is down"
+          description: "The Oddsmaker Control Service has been down for more than 1 minute."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: |
+          rate(http_server_requests_seconds_count{status=~"5.."}[5m])
+          / rate(http_server_requests_seconds_count[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} (above 5%)"
+
+      # High latency
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95, rate(http_server_requests_seconds_bucket[5m])) > 2
+        for: 2m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "High latency detected"
+          description: "P95 latency is {{ $value }}s (above 2s)"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: |
+          jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "High memory usage"
+          description: "JVM heap usage is {{ $value | humanizePercentage }}"
+
+      # High CPU usage
+      - alert: HighCpuUsage
+        expr: |
+          process_cpu_usage > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      # Database connection pool exhaustion
+      - alert: DatabaseConnectionPoolExhausted
+        expr: |
+          hikaricp_connections_active / hikaricp_connections_max > 0.9
+        for: 2m
+        labels:
+          severity: critical
+          service: control-service
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Connection pool usage is {{ $value | humanizePercentage }}"
+
+      # High database query time
+      - alert: HighDatabaseQueryTime
+        expr: |
+          histogram_quantile(0.95, rate(hikaricp_connections_usage_seconds_bucket[5m])) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: control-service
+        annotations:
+          summary: "High database query time"
+          description: "P95 query time is {{ $value }}s"
+
+  - name: oddsmaker-database
+    rules:
+      # PostgreSQL down
+      - alert: PostgresDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgres
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been down for more than 1 minute."
+
+      # High database connections
+      - alert: HighDatabaseConnections
+        expr: |
+          pg_stat_activity_count > 80
+        for: 2m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "High database connections"
+          description: "Active connections: {{ $value }}"
+
+      # Database replication lag
+      - alert: DatabaseReplicationLag
+        expr: |
+          pg_replication_lag > 30
+        for: 2m
+        labels:
+          severity: warning
+          service: postgres
+        annotations:
+          summary: "Database replication lag"
+          description: "Replication lag is {{ $value }}s"
+
+  - name: oddsmaker-cache
+    rules:
+      # Redis down
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been down for more than 1 minute."
+
+      # High memory usage
+      - alert: RedisHighMemoryUsage
+        expr: |
+          redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      # High eviction rate
+      - alert: RedisHighEvictionRate
+        expr: |
+          rate(redis_evicted_keys_total[5m]) > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high eviction rate"
+          description: "Eviction rate: {{ $value }}/s"
+
+  - name: oddsmaker-messaging
+    rules:
+      # Kafka down
+      - alert: KafkaDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka is down"
+          description: "Kafka has been down for more than 1 minute."
+
+      # High consumer lag
+      - alert: KafkaHighConsumerLag
+        expr: |
+          kafka_consumer_group_lag > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka high consumer lag"
+          description: "Consumer lag: {{ $value }} messages"
+
+  - name: oddsmaker-stream-processing
+    rules:
+      # Flink job manager down
+      - alert: FlinkJobManagerDown
+        expr: up{job="flink"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: flink
+        annotations:
+          summary: "Flink Job Manager is down"
+          description: "Flink Job Manager has been down for more than 1 minute."
+
+      # Flink job failed
+      - alert: FlinkJobFailed
+        expr: |
+          flink_jobmanager_job_uptime < 0
+        for: 1m
+        labels:
+          severity: critical
+          service: flink
+        annotations:
+          summary: "Flink job failed"
+          description: "A Flink job has failed."

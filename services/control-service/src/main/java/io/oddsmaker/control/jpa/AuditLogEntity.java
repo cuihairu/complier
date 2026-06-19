@@ -128,8 +128,16 @@ public class AuditLogEntity {
         // 安全相关
         SECURITY_ALERT,         // 安全告警
         RATE_LIMIT_EXCEEDED,    // 超过限流
-        UNAUTHORIZED_ACCESS,   // 未授权访问
-        SUSPICIOUS_ACTIVITY     // 可疑活动
+        UNAUTHORIZED_ACCESS,    // 未授权访问
+        SUSPICIOUS_ACTIVITY,    // 可疑活动
+        BLOCK,                  // 封禁/阻止
+        UNBLOCK,                // 解除封禁
+
+        // 集成相关
+        INTEGRATION_CALL,       // 集成调用
+
+        // 系统操作
+        DISABLE                 // 禁用
     }
 
     public enum AuditResult {
