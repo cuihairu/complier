@@ -135,7 +135,7 @@ class RiskManagementServiceTest {
     @DisplayName("评估事件 - 非活跃规则被过滤")
     void evaluateEvent_InactiveRuleFiltered() {
         // Given
-        testRule.ruleStatus = RiskRuleEntity.RuleStatus.DISABLED;
+        testRule.status = RiskRuleEntity.RuleStatus.DISABLED;
         List<RiskRuleEntity> rules = Arrays.asList(testRule);
         when(riskRuleRepo.findByGameIdAndEnvironment("game_test123", "env_test123")).thenReturn(rules);
 
@@ -239,9 +239,8 @@ class RiskManagementServiceTest {
     @DisplayName("解除封禁 - 成功")
     void unblockTarget_Success() {
         // Given
-        testCase.blocked = true;
-        testCase.blockedBy = "system";
-        testCase.blockedAt = LocalDateTime.now();
+        testCase.executionStatus = RiskCaseEntity.ExecutionStatus.EXECUTED;
+        testCase.actionTaken = RiskCaseEntity.ActionType.BLOCK;
         when(riskCaseRepo.findById("rc_test123")).thenReturn(Optional.of(testCase));
         when(riskCaseRepo.save(any(RiskCaseEntity.class))).thenReturn(testCase);
         doNothing().when(auditLogService).logUnblock(anyString(), anyString(), anyString(), anyString(), any());
@@ -258,7 +257,8 @@ class RiskManagementServiceTest {
     @DisplayName("解除封禁 - 未封禁案例")
     void unblockTarget_NotBlocked() {
         // Given
-        testCase.blocked = false;
+        testCase.executionStatus = RiskCaseEntity.ExecutionStatus.PENDING;
+        testCase.actionTaken = RiskCaseEntity.ActionType.ALERT;
         when(riskCaseRepo.findById("rc_test123")).thenReturn(Optional.of(testCase));
 
         // When & Then
@@ -287,9 +287,8 @@ class RiskManagementServiceTest {
     void completeReview_BenignAutoUnblock() {
         // Given
         testCase.reviewStatus = RiskCaseEntity.ReviewStatus.PENDING;
-        testCase.blocked = true;
-        testCase.blockedBy = "system";
-        testCase.blockedAt = LocalDateTime.now();
+        testCase.executionStatus = RiskCaseEntity.ExecutionStatus.EXECUTED;
+        testCase.actionTaken = RiskCaseEntity.ActionType.BLOCK;
         when(riskCaseRepo.findById("rc_test123")).thenReturn(Optional.of(testCase));
         when(riskCaseRepo.save(any(RiskCaseEntity.class))).thenReturn(testCase);
         doNothing().when(auditLogService).logUnblock(anyString(), anyString(), anyString(), anyString(), any());
