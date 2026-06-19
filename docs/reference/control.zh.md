@@ -8,16 +8,35 @@
 
 - `Game`：业务对象
 - `Environment`：逻辑发布阶段
-- `StorageProfile`：物理数据路由
+- `StorageProfile`：集群配置和容量规划
 
-也就是说，`environment` 不直接等于”独立数据库”。
+**数据库架构**：按游戏分库
+
+```
+oddsmaker_meta (元数据库)
+├─ games
+├─ environments
+├─ api_keys
+└─ audit_logs
+
+game_demo_prod (游戏数据库)
+├─ events
+├─ resource_changes
+└─ risk_events
+
+game_demo_staging
+└─ (同样的表结构)
+```
+
+Control API 需要根据 `gameId + environment` 路由到对应的数据库。
 
 ## 字段命名约定
 
 - `gameId` / `environmentId`：控制面 API 使用的内部标识符
 - `game_id` / `environment`：事件协议使用的逻辑名称（如 `prod`、`staging`）
 - API Key 绑定到 `gameId + environmentId`（内部 ID）
-- 事件上报使用 `game_id + environment`（逻辑名称）
+- **事件上报**：`game_id` 和 `environment` 已在数据库/表层级体现，不需要作为字段
+- **新增 `server_id`**：MMORPG 游戏必需，用于区分不同服务器/大区
 
 ## 核心资源
 

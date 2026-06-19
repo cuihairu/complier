@@ -202,11 +202,12 @@ RiskRule
 
 ## 5. ClickHouse 核心表
 
+**数据库架构**：每个游戏独立数据库
+
 ```sql
+-- game_demo_prod.events
 CREATE TABLE events
 (
-    game_id LowCardinality(String),
-    environment LowCardinality(String),
     event_date Date DEFAULT toDate(ts_server),
     ts_server DateTime64(3) DEFAULT now64(3),
     ts_client DateTime64(3),
@@ -241,8 +242,8 @@ CREATE TABLE events
     revenue_currency FixedString(3) DEFAULT '',
     receipt_hash String DEFAULT '',
 
-    virtual_currency LowCardinality(String) DEFAULT '',
-    virtual_amount Int64 DEFAULT 0,
+    resource_id LowCardinality(String) DEFAULT '',
+    resource_amount Int64 DEFAULT 0,
     flow_type LowCardinality(String) DEFAULT '',
     item_id String DEFAULT '',
 
@@ -257,14 +258,13 @@ CREATE TABLE events
     props Map(String, String)
 )
 ENGINE = MergeTree
-PARTITION BY (game_id, environment, toYYYYMM(event_date))
-ORDER BY (game_id, environment, event_type, event_date, player_id, user_id, device_id, ts_server, event_id)
+PARTITION BY (toYYYYMM(event_date))
+ORDER BY (event_type, event_date, server_id, player_id, user_id, device_id, ts_server, event_id)
 TTL event_date + INTERVAL 365 DAY;
 
+-- game_demo_prod.risk_events
 CREATE TABLE risk_events
 (
-    game_id LowCardinality(String),
-    environment LowCardinality(String),
     ts DateTime64(3),
     risk_event_id String,
     source_event_id String DEFAULT '',
@@ -279,13 +279,12 @@ CREATE TABLE risk_events
     evidence Map(String, String)
 )
 ENGINE = MergeTree
-PARTITION BY (game_id, environment, toYYYYMM(ts))
-ORDER BY (game_id, environment, risk_type, severity, ts, subject_id);
+PARTITION BY (toYYYYMM(ts))
+ORDER BY (risk_type, severity, ts, subject_id);
 
+-- game_demo_prod.identities
 CREATE TABLE identities
 (
-    game_id LowCardinality(String),
-    environment LowCardinality(String),
     identity_id String,
     user_id String DEFAULT '',
     player_id String DEFAULT '',
@@ -296,8 +295,8 @@ CREATE TABLE identities
     risk_score Float32 DEFAULT 0
 )
 ENGINE = ReplacingMergeTree(last_seen)
-PARTITION BY (game_id, environment, toYYYYMM(last_seen))
-ORDER BY (game_id, environment, identity_id);
+PARTITION BY (toYYYYMM(last_seen))
+ORDER BY (identity_id);
 ```
 
 ## 6. 风控模块
@@ -332,29 +331,27 @@ ORDER BY (game_id, environment, identity_id);
 
 ### 6.4 风控策略示例
 
+**注意**：`game_id` 和 `environment` 已在数据库/表层级体现，风控策略配置时不需要指定。
+
 ```yaml
 rule_id: payment_receipt_reuse
-game_id: game_demo
-environment: prod
+# game_id 和 environment 在数据库层级：game_demo_prod
 risk_type: payment
 severity: high
 window: 24h
 condition:
   receipt_hash_distinct_users_gt: 1
 action: block
-emit:
-  topic: oddsmaker.risk_events
 ```
 
 ```yaml
 rule_id: resource_inflation_spike
-game_id: game_demo
-environment: prod
+# game_id 和 environment 在数据库层级：game_demo_prod
 risk_type: economy
 severity: medium
 window: 10m
 condition:
-  virtual_currency: gold
+  resource_id: gold
   source_amount_gt_p99_multiplier: 5
 action: alert
 ```
