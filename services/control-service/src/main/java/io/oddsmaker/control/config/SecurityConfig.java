@@ -106,7 +106,7 @@ public class SecurityConfig {
                     .policy("geolocation=(), camera=(), microphone=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()"))
 
                 // Frame选项
-                .frameOptions(frame -> frame.deny())
+                .frameOptions(frame -> frame.sameOrigin())
 
                 // ContentType选项
                 .contentTypeOptions(contentType -> {})
