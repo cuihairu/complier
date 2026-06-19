@@ -26,7 +26,7 @@
 
 交付：
 
-- 事件契约 v3：`game_id`、`environment`、`event_type`、`event_name`。
+- 事件契约 v1：`game_id`、`environment`、`event_type`、`event_name`。
 - ClickHouse 新表按 `(game_id, environment, event_date)` 分区。
 - Gateway 兼容旧字段并输出新模型。
 - 客户端 SDK 移除 HMAC secret。
