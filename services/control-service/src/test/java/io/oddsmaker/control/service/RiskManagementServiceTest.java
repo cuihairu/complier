@@ -135,7 +135,7 @@ class RiskManagementServiceTest {
     @DisplayName("评估事件 - 非活跃规则被过滤")
     void evaluateEvent_InactiveRuleFiltered() {
         // Given
-        testRule.status = RiskRuleEntity.RuleStatus.DISABLED;
+        testRule.status = RiskRuleEntity.RuleStatus.PAUSED;
         List<RiskRuleEntity> rules = Arrays.asList(testRule);
         when(riskRuleRepo.findByGameIdAndEnvironment("game_test123", "env_test123")).thenReturn(rules);
 
@@ -271,7 +271,7 @@ class RiskManagementServiceTest {
     @DisplayName("完成审核 - 成功")
     void completeReview_Success() {
         // Given
-        testCase.reviewStatus = RiskCaseEntity.ReviewStatus.PENDING;
+        testCase.reviewStatus = "pending";
         when(riskCaseRepo.findById("rc_test123")).thenReturn(Optional.of(testCase));
         when(riskCaseRepo.save(any(RiskCaseEntity.class))).thenReturn(testCase);
 
@@ -286,7 +286,7 @@ class RiskManagementServiceTest {
     @DisplayName("完成审核 - 误报自动解除封禁")
     void completeReview_BenignAutoUnblock() {
         // Given
-        testCase.reviewStatus = RiskCaseEntity.ReviewStatus.PENDING;
+        testCase.reviewStatus = "pending";
         testCase.executionStatus = RiskCaseEntity.ExecutionStatus.EXECUTED;
         testCase.actionTaken = RiskCaseEntity.ActionType.BLOCK;
         when(riskCaseRepo.findById("rc_test123")).thenReturn(Optional.of(testCase));
