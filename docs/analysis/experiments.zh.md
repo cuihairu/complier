@@ -67,7 +67,7 @@ Oddsmaker.Oddsmaker.Track("experiment_exposure", new Dictionary<string,object>{{
 ```
 
 事件规范
-- 曝光：`experiment_exposure`，props: { exp: <id>, variant: <name> }
+- 曝光：`experiment_exposure`，props: { exp: `<id>`, variant: `<name>` }
 - 转化事件：按业务上报，如 `level_complete` / `purchase`
 
 ClickHouse 聚合（示例）
