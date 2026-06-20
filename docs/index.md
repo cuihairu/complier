@@ -28,8 +28,8 @@ features:
     details: Comprehensive risk management with real-time evaluation and blocking
   - icon:
       src: /icons/experiment.svg
-    title: A/B Testing
-    details: Built-in experiment platform with statistical analysis
+    title: A/B Test Analysis
+    details: Analyze experiment results with statistical significance, conversion rates, and SRM detection
   - icon:
       src: /icons/ml.svg
     title: Machine Learning
@@ -79,8 +79,8 @@ Process millions of events per second with Kafka + Flink + ClickHouse pipeline.
 ### Risk Control
 Detect and prevent cheating, payment fraud, and other suspicious activities.
 
-### A/B Testing
-Run experiments with statistical significance testing and SRM detection.
+### A/B Test Analysis
+Analyze experiment results with conversion rates, statistical significance testing, and Sample Ratio Mismatch (SRM) detection. Track exposure events and measure uplift across variants.
 
 ### Machine Learning
 Deploy and manage ML models for predictions and anomaly detection.
