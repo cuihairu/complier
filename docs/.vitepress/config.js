@@ -64,8 +64,9 @@ export default withMermaid(defineConfig({
           ]
         },
         {
-          text: 'Analysis',
+          text: 'Analytics',
           items: [
+            { text: 'Analytics API', link: '/reference/analytics' },
             { text: 'Gaming Scenarios', link: '/reference/gaming-scenarios' },
           ]
         }
