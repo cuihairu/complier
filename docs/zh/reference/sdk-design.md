@@ -13,6 +13,8 @@
 事件接口
 - `track(eventName, props?)` 返回 `event_id`
 - `setUserId(userId|null)`、`setUserProps(props)`
+- `identify(userId, props?)` 设置用户身份并上报 identity 事件，触发后端把 `device_id` 归并到 `user_id`（支持游客转账号）；事件 props 含 `previous_user_id` 和 `player_id`
+- `setPlayer(playerId|null)` 设置当前角色 ID，后续事件的 props 自动带 `player_id`
 - `expose(exp, variant)` 标准化实验曝光事件
 - `revenue(amount, currency, props?)`
 - `flush()` 手动刷新
@@ -40,6 +42,8 @@ const client = new Oddsmaker({ apiKey, endpoint, gameId, environment });
 client.track('level_start', { level: 3 });
 client.setUserId('u123');
 client.setUserProps({ channel: 'organic' });
+client.setPlayer('char_456');
+client.identify('u123');   // 游客转账号时触发，后端归并 device→user
 client.expose('paywall', 'B');
 client.revenue(9.99, 'USD', { sku: 'noads' });
 await client.flush();

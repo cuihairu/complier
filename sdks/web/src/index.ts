@@ -90,6 +90,7 @@ export class Oddsmaker {
   private environment: string;
   private deviceId: string;
   private userId: string | null = null;
+  private playerId: string | null = null;
   private userProps: Record<string, string | number | boolean | null> = {};
   private queue: Queue;
   private flushInterval: number;
@@ -132,6 +133,16 @@ export class Oddsmaker {
 
   setUserId(userId: string | null) { this.userId = userId; }
   setUserProps(props: Record<string, string | number | boolean | null>) { this.userProps = { ...this.userProps, ...props }; }
+  setPlayer(playerId: string | null) { this.playerId = playerId; }
+
+  identify(userId: string, props?: EventProps): string {
+    const previousUserId = this.userId;
+    this.userId = userId;
+    const identifyProps: EventProps = { $identify: true, new_user_id: userId };
+    if (previousUserId && previousUserId !== userId) identifyProps.previous_user_id = previousUserId;
+    if (this.playerId) identifyProps.player_id = this.playerId;
+    return this.track('$identify', { ...identifyProps, ...(props || {}) });
+  }
 
   track(eventName: string, props?: EventProps): string {
     const ts = nowMs();
@@ -210,7 +221,9 @@ export class Oddsmaker {
   }
 
   private mergeProps(p?: EventProps) {
-    return { ...this.userProps, ...(p || {}) };
+    const base: EventProps = { ...this.userProps };
+    if (this.playerId) base.player_id = this.playerId;
+    return { ...base, ...(p || {}) };
   }
 
   private queueKey() { return `oddsmaker_queue_${this.gameId}_${this.environment}_${this.deviceId}`; }
@@ -270,6 +283,7 @@ function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 function jitter(n: number) { return Math.floor(Math.random() * n); }
 function inferEventType(eventName: string) {
   const name = eventName.toLowerCase();
+  if (name === '$identify' || name.includes('identity')) return 'identity';
   if (name.includes('risk') || name.includes('fraud')) return 'risk';
   if (name.includes('experiment')) return 'experiment';
   if (name.includes('ad_')) return 'ad';

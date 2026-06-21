@@ -65,6 +65,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
 
   private var deviceId: String
   private var userId: String? = null
+  private var playerId: String? = null
   private var userProps: Map<String, Any?> = emptyMap()
   private var sessionId: String? = null
   private var lastActive: Long = System.currentTimeMillis()
@@ -79,6 +80,22 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
 
   fun setUserId(uid: String?) { userId = uid }
   fun setUserProps(props: Map<String, Any?>) { userProps = userProps + props }
+  fun setPlayer(pid: String?) { playerId = pid }
+
+  fun identify(newUserId: String, props: Map<String, Any?>? = null): String {
+    val previousUserId = userId
+    userId = newUserId
+    val identifyProps = mutableMapOf<String, Any?>(
+      "\$identify" to true,
+      "new_user_id" to newUserId
+    )
+    if (!previousUserId.isNullOrEmpty() && previousUserId != newUserId) {
+      identifyProps["previous_user_id"] = previousUserId
+    }
+    if (!playerId.isNullOrEmpty()) identifyProps["player_id"] = playerId
+    if (props != null) identifyProps.putAll(props)
+    return track("\$identify", identifyProps)
+  }
 
   fun track(eventName: String, props: Map<String, Any?>? = null): String {
     val now = System.currentTimeMillis()
@@ -388,8 +405,10 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
   }
 
   private fun mergeProps(props: Map<String, Any?>?): Map<String, Any?>? {
-    if (userProps.isEmpty()) return props
-    return userProps + (props ?: emptyMap())
+    val base: MutableMap<String, Any?> = LinkedHashMap(userProps)
+    if (!playerId.isNullOrEmpty()) base["player_id"] = playerId
+    if (base.isEmpty()) return props
+    return base + (props ?: emptyMap())
   }
 
   private fun recalcQueueBytes() {
@@ -414,6 +433,7 @@ class Oddsmaker(private val ctx: Context, private val opts: Options) {
   private fun inferEventType(eventName: String): String {
     val name = eventName.lowercase()
     return when {
+      name == "\$identify" || "identity" in name -> "identity"
       "risk" in name || "fraud" in name -> "risk"
       "experiment" in name -> "experiment"
       "ad_" in name -> "ad"

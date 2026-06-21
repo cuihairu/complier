@@ -58,6 +58,7 @@ namespace Oddsmaker
         private Options _opts;
         private string _deviceId;
         private string _userId = null;
+        private string _playerId = null;
         private readonly Dictionary<string, object> _userProps = new Dictionary<string, object>();
         private string _sessionId = null;
         private long _lastActiveMs = 0;
@@ -102,6 +103,37 @@ namespace Oddsmaker
         {
             if (Instance == null) return;
             Instance._userId = string.IsNullOrEmpty(userId) ? null : userId;
+        }
+
+        public static void SetPlayer(string playerId)
+        {
+            if (Instance == null) return;
+            Instance._playerId = string.IsNullOrEmpty(playerId) ? null : playerId;
+        }
+
+        public static string Identify(string newUserId, Dictionary<string, object> props = null)
+        {
+            if (Instance == null) return null;
+            var previousUserId = Instance._userId;
+            Instance._userId = newUserId;
+            var identifyProps = new Dictionary<string, object>
+            {
+                { "$identify", true },
+                { "new_user_id", newUserId }
+            };
+            if (!string.IsNullOrEmpty(previousUserId) && previousUserId != newUserId)
+            {
+                identifyProps["previous_user_id"] = previousUserId;
+            }
+            if (!string.IsNullOrEmpty(Instance._playerId))
+            {
+                identifyProps["player_id"] = Instance._playerId;
+            }
+            if (props != null)
+            {
+                foreach (var kv in props) identifyProps[kv.Key] = kv.Value;
+            }
+            return Instance.TrackInternal("$identify", identifyProps);
         }
 
         public static void SetUserProps(Dictionary<string, object> props)
@@ -180,8 +212,8 @@ namespace Oddsmaker
 
         private Dictionary<string, object> MergeProps(Dictionary<string, object> props)
         {
-            if (_userProps.Count == 0) return props;
             var merged = new Dictionary<string, object>(_userProps);
+            if (!string.IsNullOrEmpty(_playerId)) merged["player_id"] = _playerId;
             if (props != null)
             {
                 foreach (var kv in props) merged[kv.Key] = kv.Value;
@@ -535,6 +567,7 @@ namespace Oddsmaker
         private static string InferEventType(string eventName)
         {
             var name = (eventName ?? string.Empty).ToLowerInvariant();
+            if (name == "$identify" || name.Contains("identity")) return "identity";
             if (name.Contains("risk") || name.Contains("fraud")) return "risk";
             if (name.Contains("experiment")) return "experiment";
             if (name.Contains("ad_")) return "ad";

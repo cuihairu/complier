@@ -29,6 +29,7 @@ public final class Oddsmaker {
     private var opts: OddsmakerOptions? = nil
     private var deviceId: String = ""
     private var userId: String? = nil
+    private var playerId: String? = nil
     private var userProps: [String: Any] = [:]
     private var sessionId: String? = nil
     private var lastActive: TimeInterval = Date().timeIntervalSince1970
@@ -56,10 +57,24 @@ public final class Oddsmaker {
     }
 
     public func setUserId(_ id: String?) { self.userId = id }
+    public func setPlayer(_ id: String?) { self.playerId = id }
     public func setUserProps(_ props: [String: Any]) {
         for (key, value) in props {
             self.userProps[key] = value
         }
+    }
+
+    @discardableResult
+    public func identify(_ newUserId: String, props: [String: Any]? = nil) -> String {
+        let previousUserId = self.userId
+        self.userId = newUserId
+        var identifyProps: [String: Any] = ["$identify": true, "new_user_id": newUserId]
+        if let prev = previousUserId, prev != newUserId {
+            identifyProps["previous_user_id"] = prev
+        }
+        if let pid = self.playerId { identifyProps["player_id"] = pid }
+        if let extra = props { for (k, v) in extra { identifyProps[k] = v } }
+        return track("$identify", props: identifyProps)
     }
 
     public func track(_ name: String, props: [String: Any]? = nil) -> String {
@@ -162,6 +177,7 @@ public final class Oddsmaker {
                             options: OddsmakerOptions,
                             now: TimeInterval) -> Event {
         var merged = userProps
+        if let pid = self.playerId { merged["player_id"] = pid }
         if let props = props {
             for (key, value) in props {
                 merged[key] = value
@@ -253,6 +269,7 @@ public final class Oddsmaker {
 
     private static func inferEventType(_ eventName: String) -> String {
         let name = eventName.lowercased()
+        if name == "$identify" || name.contains("identity") { return "identity" }
         if name.contains("risk") || name.contains("fraud") { return "risk" }
         if name.contains("experiment") { return "experiment" }
         if name.contains("ad_") { return "ad" }
