@@ -52,6 +52,8 @@ WHERE user_id = 'u123';
 
 VELOCITY 检测窗口内资源总量异常（如 10 分钟内产出金币超 100 万），RATIO 检测产出/消耗比异常（如 source/sink > 10 说明只产不耗，疑似刷资源）。PATTERN（多事件序列，如登录→购买→退款）后续用 Flink CEP 实现。
 
+**阈值动态化**：所有阈值默认从 `-D` 系统属性读取，但若配置了 Control Service 地址，risk-job 会定时（默认 60s）拉取活跃 `RiskRuleEntity`，按 `ruleType` + `triggerThreshold` 覆盖默认阈值。运营在 Control Service 改了规则阈值，60s 内生效，无需重启 job。Control Service 不可用时自动回退到 `-D` 默认值。
+
 subject 优先级：`user_id`（PLAYER）> `device_id`（DEVICE）。
 
 输出字段对齐 ClickHouse `risk_events` 表：`game_id, environment, ts, risk_event_id, source_event_id, rule_id, risk_type, severity, subject_type, subject_id, score, action, reason, evidence`。
@@ -65,7 +67,11 @@ flink run -c io.oddsmaker.jobs.risk.RiskJob jobs/flink/risk-job/build/libs/risk-
   -Dclickhouse.url=jdbc:clickhouse://localhost:8123/default \
   -Drisk.threshold.amount=100000 \
   -Drisk.frequency.window-minutes=10 \
-  -Drisk.frequency.max-events=1000
+  -Drisk.frequency.max-events=1000 \
+  -Dcontrol.url=http://localhost:8085 \
+  -Dcontrol.gameId=game_demo \
+  -Dcontrol.token=admin \
+  -Drule.refresh-ms=60000
 ```
 
 验证：
@@ -81,8 +87,8 @@ kafka-console-consumer --bootstrap-server localhost:9092 --topic oddsmaker.risk_
 ```
 
 扩展规划：
-- 规则参数后续接入 Control Service 的 `RiskRuleEntity`，按 `game_id + environment` 拉取活跃规则（HTTP 定时刷新）。
-- 规则类型扩展：VELOCITY（窗口内资源变动总和）、RATIO（source/sink 比例）、PATTERN（多事件序列）。
+- 规则参数后续接入 Control Service 的 `RiskRuleEntity`，按 `game_id + environment` 拉取活跃规则（HTTP 定时刷新）。**✅ 已实现：RuleFetcher 定时拉取 `/api/risk-dashboard/rules/{gameId}`，按 ruleType 覆盖阈值。**
+- 规则类型扩展：VELOCITY（窗口内资源变动总和）、RATIO（source/sink 比例）、PATTERN（多事件序列）。**✅ VELOCITY/RATIO 已实现；PATTERN 待 Flink CEP。**
 - 命中后动作接入 Control Service 的 ReviewQueue 和 Webhook 通知。
 
 启动方式

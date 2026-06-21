@@ -40,11 +40,11 @@ public class RiskJob {
         String chUser = System.getProperty("clickhouse.user", "default");
         String chPass = System.getProperty("clickhouse.pass", "");
 
-        BigDecimal amountThreshold = new BigDecimal(System.getProperty("risk.threshold.amount", "100000"));
         int freqWindowMin = Integer.parseInt(System.getProperty("risk.frequency.window-minutes", "10"));
-        long freqMaxEvents = Long.parseLong(System.getProperty("risk.frequency.max-events", "1000"));
-        BigDecimal velocityMax = new BigDecimal(System.getProperty("risk.velocity.max-amount", "1000000"));
-        BigDecimal ratioMax = new BigDecimal(System.getProperty("risk.ratio.max-source-sink", "10"));
+        String controlUrl = System.getProperty("control.url", "http://localhost:8085");
+        String controlGameId = System.getProperty("control.gameId", "default");
+        String controlToken = System.getProperty("control.token", "");
+        long ruleRefreshMs = Long.parseLong(System.getProperty("rule.refresh-ms", "60000"));
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
@@ -94,7 +94,7 @@ public class RiskJob {
         }).returns(Types.POJO(RiskInput.class));
 
         DataStream<RiskHit> thresholdHits = inputs
-                .filter(i -> i.amount != null && i.amount.compareTo(amountThreshold) > 0)
+                .filter(i -> i.amount != null && i.amount.compareTo(RuleConfig.current().amountThreshold) > 0)
                 .map(i -> {
                     Map<String, String> ev = new HashMap<>();
                     ev.put("resource_amount", i.amount.toPlainString());
@@ -104,7 +104,7 @@ public class RiskJob {
                             "risk-threshold-amount", "THRESHOLD", "HIGH",
                             subjectType(i), subjectId(i),
                             80f, "ALERT",
-                            "resource amount " + i.amount.toPlainString() + " exceeds threshold " + amountThreshold.toPlainString(),
+                            "resource amount " + i.amount.toPlainString() + " exceeds threshold " + RuleConfig.current().amountThreshold.toPlainString(),
                             ev);
                 }).returns(Types.POJO(RiskHit.class));
 
@@ -113,6 +113,10 @@ public class RiskJob {
                 .window(SlidingEventTimeWindows.of(Time.minutes(freqWindowMin), Time.minutes(freqWindowMin / 2 > 0 ? freqWindowMin / 2 : 1)))
                 .process(new ProcessWindowFunction<RiskInput, RiskHit, String, TimeWindow>() {
                     @Override
+                    public void open(org.apache.flink.configuration.Configuration parameters) {
+                        RuleFetcher.startOnce(controlUrl, controlGameId, controlToken, ruleRefreshMs);
+                    }
+                    @Override
                     public void process(String key, Context ctx, Iterable<RiskInput> events, Collector<RiskHit> out) {
                         long count = 0;
                         RiskInput last = null;
@@ -120,7 +124,8 @@ public class RiskJob {
                             count++;
                             last = e;
                         }
-                        if (count > freqMaxEvents && last != null) {
+                        long limit = RuleConfig.current().freqMaxEvents;
+                        if (count > limit && last != null) {
                             Map<String, String> ev = new HashMap<>();
                             ev.put("window_events", String.valueOf(count));
                             ev.put("window_minutes", String.valueOf(freqWindowMin));
@@ -130,7 +135,7 @@ public class RiskJob {
                                     "risk-frequency-burst", "FREQUENCY", "MEDIUM",
                                     subjectType(last), subjectId(last),
                                     60f, "ALERT",
-                                    "event burst " + count + " in " + freqWindowMin + "min (limit " + freqMaxEvents + ")",
+                                    "event burst " + count + " in " + freqWindowMin + "min (limit " + limit + ")",
                                     ev));
                         }
                     }
@@ -142,6 +147,10 @@ public class RiskJob {
                 .window(SlidingEventTimeWindows.of(Time.minutes(freqWindowMin), Time.minutes(freqWindowMin / 2 > 0 ? freqWindowMin / 2 : 1)))
                 .process(new ProcessWindowFunction<RiskInput, RiskHit, String, TimeWindow>() {
                     @Override
+                    public void open(org.apache.flink.configuration.Configuration parameters) {
+                        RuleFetcher.startOnce(controlUrl, controlGameId, controlToken, ruleRefreshMs);
+                    }
+                    @Override
                     public void process(String key, Context ctx, Iterable<RiskInput> events, Collector<RiskHit> out) {
                         BigDecimal sum = BigDecimal.ZERO;
                         long count = 0;
@@ -151,7 +160,8 @@ public class RiskJob {
                             count++;
                             last = e;
                         }
-                        if (sum.compareTo(velocityMax) > 0 && last != null) {
+                        BigDecimal limit = RuleConfig.current().velocityMax;
+                        if (sum.compareTo(limit) > 0 && last != null) {
                             Map<String, String> ev = new HashMap<>();
                             ev.put("window_sum", sum.toPlainString());
                             ev.put("window_events", String.valueOf(count));
@@ -162,7 +172,7 @@ public class RiskJob {
                                     "risk-velocity-amount", "VELOCITY", "HIGH",
                                     subjectType(last), subjectId(last),
                                     75f, "ALERT",
-                                    "resource velocity " + sum.toPlainString() + " in " + freqWindowMin + "min exceeds " + velocityMax.toPlainString(),
+                                    "resource velocity " + sum.toPlainString() + " in " + freqWindowMin + "min exceeds " + limit.toPlainString(),
                                     ev));
                         }
                     }
@@ -175,6 +185,10 @@ public class RiskJob {
                 .window(SlidingEventTimeWindows.of(Time.minutes(freqWindowMin), Time.minutes(freqWindowMin / 2 > 0 ? freqWindowMin / 2 : 1)))
                 .process(new ProcessWindowFunction<RiskInput, RiskHit, String, TimeWindow>() {
                     @Override
+                    public void open(org.apache.flink.configuration.Configuration parameters) {
+                        RuleFetcher.startOnce(controlUrl, controlGameId, controlToken, ruleRefreshMs);
+                    }
+                    @Override
                     public void process(String key, Context ctx, Iterable<RiskInput> events, Collector<RiskHit> out) {
                         BigDecimal sourceSum = BigDecimal.ZERO;
                         BigDecimal sinkSum = BigDecimal.ZERO;
@@ -186,7 +200,8 @@ public class RiskJob {
                         }
                         if (sinkSum.compareTo(BigDecimal.ZERO) > 0 && last != null) {
                             BigDecimal ratio = sourceSum.divide(sinkSum, 2, RoundingMode.HALF_UP);
-                            if (ratio.compareTo(ratioMax) > 0) {
+                            BigDecimal limit = RuleConfig.current().ratioMax;
+                            if (ratio.compareTo(limit) > 0) {
                                 Map<String, String> ev = new HashMap<>();
                                 ev.put("source_sum", sourceSum.toPlainString());
                                 ev.put("sink_sum", sinkSum.toPlainString());
@@ -198,7 +213,7 @@ public class RiskJob {
                                         "risk-ratio-source-sink", "RATIO", "MEDIUM",
                                         subjectType(last), subjectId(last),
                                         65f, "ALERT",
-                                        "source/sink ratio " + ratio.toPlainString() + " in " + freqWindowMin + "min exceeds " + ratioMax.toPlainString(),
+                                        "source/sink ratio " + ratio.toPlainString() + " in " + freqWindowMin + "min exceeds " + limit.toPlainString(),
                                         ev));
                             }
                         }

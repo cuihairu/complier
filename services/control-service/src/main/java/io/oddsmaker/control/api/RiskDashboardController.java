@@ -1,5 +1,7 @@
 package io.oddsmaker.control.api;
 
+import io.oddsmaker.control.jpa.RiskRuleEntity;
+import io.oddsmaker.control.jpa.RiskRuleRepo;
 import io.oddsmaker.control.service.RiskDashboardService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -8,8 +10,10 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 风控仪表盘API控制器
@@ -21,6 +25,29 @@ public class RiskDashboardController {
 
     @Autowired
     private RiskDashboardService riskDashboardService;
+
+    @Autowired
+    private RiskRuleRepo riskRuleRepo;
+
+    @GetMapping("/rules/{gameId}")
+    public ResponseEntity<List<Map<String, Object>>> getActiveRules(@PathVariable String gameId) {
+        List<Map<String, Object>> rules = riskRuleRepo.findActiveByGameId(gameId).stream()
+                .map(r -> {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("id", r.id);
+                    m.put("name", r.name);
+                    m.put("ruleType", r.ruleType != null ? r.ruleType.name() : null);
+                    m.put("ruleConditions", r.ruleConditions);
+                    m.put("triggerThreshold", r.triggerThreshold);
+                    m.put("timeWindowMinutes", r.timeWindowMinutes);
+                    m.put("riskScore", r.riskScore);
+                    m.put("riskLevel", r.riskLevel != null ? r.riskLevel.name() : null);
+                    m.put("actionType", r.actionType != null ? r.actionType.name() : null);
+                    return m;
+                })
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(rules);
+    }
 
     /**
      * 获取游戏的风控概览
