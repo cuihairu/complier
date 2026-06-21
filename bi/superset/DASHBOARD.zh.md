@@ -67,4 +67,8 @@
   - Dataset: `v_ltv_by_cohort_day`
   - X 轴: `cohort_date`；Metrics: `sumIf(revenue, age_day <= 6)` 作为 D7 LTV，`sumIf(revenue, age_day <= 29)` 作为 D30 LTV
   - 也可用 `v_ad_revenue_by_day` 做 IAP + 广告收入统一分析
+- Crash/Error 分析：执行 `schema/sql/clickhouse/crash.sql` 后，基于 `v_crash_by_day` / `v_crash_top_groups` / `v_crash_rate_by_version` 建图：
+  - Crash 趋势（折线）：X 轴 `event_date`；Metrics `sum(affected_devices)`；Group by `app_version`
+  - Top Crash 分组（表格）：基于 `v_crash_top_groups`，按 `occurrences` 排序
+  - 崩溃率（折线）：基于 `v_crash_rate_by_version`，Metrics `crash_rate`
 - 按 `game_id` 建多个仪表盘，或在每个图表增加 `game_id` / `environment` 过滤器
