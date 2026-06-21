@@ -22,6 +22,7 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.HashMap;
@@ -42,6 +43,8 @@ public class RiskJob {
         BigDecimal amountThreshold = new BigDecimal(System.getProperty("risk.threshold.amount", "100000"));
         int freqWindowMin = Integer.parseInt(System.getProperty("risk.frequency.window-minutes", "10"));
         long freqMaxEvents = Long.parseLong(System.getProperty("risk.frequency.max-events", "1000"));
+        BigDecimal velocityMax = new BigDecimal(System.getProperty("risk.velocity.max-amount", "1000000"));
+        BigDecimal ratioMax = new BigDecimal(System.getProperty("risk.ratio.max-source-sink", "10"));
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
@@ -86,6 +89,7 @@ public class RiskJob {
             Long tsServer = (Long) r.get("ts_server");
             if (tsServer != null) in.ts = new Timestamp(tsServer / 1000L);
             in.amount = amount;
+            in.flowType = nz(str(r.get("flow_type")));
             out.collect(in);
         }).returns(Types.POJO(RiskInput.class));
 
@@ -132,7 +136,76 @@ public class RiskJob {
                     }
                 }).returns(Types.POJO(RiskHit.class));
 
-        DataStream<RiskHit> allHits = thresholdHits.union(frequencyHits);
+        DataStream<RiskHit> velocityHits = inputs
+                .filter(i -> i.amount != null && i.amount.compareTo(BigDecimal.ZERO) > 0)
+                .keyBy(i -> i.gameId + "|" + i.environment + "|" + subjectKey(i))
+                .window(SlidingEventTimeWindows.of(Time.minutes(freqWindowMin), Time.minutes(freqWindowMin / 2 > 0 ? freqWindowMin / 2 : 1)))
+                .process(new ProcessWindowFunction<RiskInput, RiskHit, String, TimeWindow>() {
+                    @Override
+                    public void process(String key, Context ctx, Iterable<RiskInput> events, Collector<RiskHit> out) {
+                        BigDecimal sum = BigDecimal.ZERO;
+                        long count = 0;
+                        RiskInput last = null;
+                        for (RiskInput e : events) {
+                            sum = sum.add(e.amount);
+                            count++;
+                            last = e;
+                        }
+                        if (sum.compareTo(velocityMax) > 0 && last != null) {
+                            Map<String, String> ev = new HashMap<>();
+                            ev.put("window_sum", sum.toPlainString());
+                            ev.put("window_events", String.valueOf(count));
+                            ev.put("window_minutes", String.valueOf(freqWindowMin));
+                            ev.put("subject", subjectKey(last));
+                            out.collect(new RiskHit(
+                                    last.gameId, last.environment, last.ts, UUID.randomUUID().toString(), last.eventId,
+                                    "risk-velocity-amount", "VELOCITY", "HIGH",
+                                    subjectType(last), subjectId(last),
+                                    75f, "ALERT",
+                                    "resource velocity " + sum.toPlainString() + " in " + freqWindowMin + "min exceeds " + velocityMax.toPlainString(),
+                                    ev));
+                        }
+                    }
+                }).returns(Types.POJO(RiskHit.class));
+
+        DataStream<RiskHit> ratioHits = inputs
+                .filter(i -> i.amount != null && i.amount.compareTo(BigDecimal.ZERO) > 0
+                        && ("source".equals(i.flowType) || "sink".equals(i.flowType)))
+                .keyBy(i -> i.gameId + "|" + i.environment + "|" + subjectKey(i))
+                .window(SlidingEventTimeWindows.of(Time.minutes(freqWindowMin), Time.minutes(freqWindowMin / 2 > 0 ? freqWindowMin / 2 : 1)))
+                .process(new ProcessWindowFunction<RiskInput, RiskHit, String, TimeWindow>() {
+                    @Override
+                    public void process(String key, Context ctx, Iterable<RiskInput> events, Collector<RiskHit> out) {
+                        BigDecimal sourceSum = BigDecimal.ZERO;
+                        BigDecimal sinkSum = BigDecimal.ZERO;
+                        RiskInput last = null;
+                        for (RiskInput e : events) {
+                            if ("source".equals(e.flowType)) sourceSum = sourceSum.add(e.amount);
+                            else if ("sink".equals(e.flowType)) sinkSum = sinkSum.add(e.amount);
+                            last = e;
+                        }
+                        if (sinkSum.compareTo(BigDecimal.ZERO) > 0 && last != null) {
+                            BigDecimal ratio = sourceSum.divide(sinkSum, 2, RoundingMode.HALF_UP);
+                            if (ratio.compareTo(ratioMax) > 0) {
+                                Map<String, String> ev = new HashMap<>();
+                                ev.put("source_sum", sourceSum.toPlainString());
+                                ev.put("sink_sum", sinkSum.toPlainString());
+                                ev.put("ratio", ratio.toPlainString());
+                                ev.put("window_minutes", String.valueOf(freqWindowMin));
+                                ev.put("subject", subjectKey(last));
+                                out.collect(new RiskHit(
+                                        last.gameId, last.environment, last.ts, UUID.randomUUID().toString(), last.eventId,
+                                        "risk-ratio-source-sink", "RATIO", "MEDIUM",
+                                        subjectType(last), subjectId(last),
+                                        65f, "ALERT",
+                                        "source/sink ratio " + ratio.toPlainString() + " in " + freqWindowMin + "min exceeds " + ratioMax.toPlainString(),
+                                        ev));
+                            }
+                        }
+                    }
+                }).returns(Types.POJO(RiskHit.class));
+
+        DataStream<RiskHit> allHits = thresholdHits.union(frequencyHits).union(velocityHits).union(ratioHits);
 
         KafkaSink<String> kafkaSink = KafkaSink.<String>builder()
                 .setBootstrapServers(bootstrap)
@@ -234,6 +307,7 @@ public class RiskJob {
         public String clientIp;
         public Timestamp ts;
         public BigDecimal amount;
+        public String flowType;
     }
 
     public static final class RiskHit {

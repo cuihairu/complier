@@ -47,6 +47,10 @@ WHERE user_id = 'u123';
 |---|---|---|---|
 | `risk-threshold-amount` | THRESHOLD | `resource_amount` 超阈值 | `risk.threshold.amount=100000` |
 | `risk-frequency-burst` | FREQUENCY | 同 subject 滑动窗口内事件数超阈值 | `risk.frequency.window-minutes=10`<br>`risk.frequency.max-events=1000` |
+| `risk-velocity-amount` | VELOCITY | 同 subject 窗口内资源变动总和超阈值 | `risk.velocity.max-amount=1000000` |
+| `risk-ratio-source-sink` | RATIO | 同 subject 窗口内 source/sink 比例超阈值 | `risk.ratio.max-source-sink=10` |
+
+VELOCITY 检测窗口内资源总量异常（如 10 分钟内产出金币超 100 万），RATIO 检测产出/消耗比异常（如 source/sink > 10 说明只产不耗，疑似刷资源）。PATTERN（多事件序列，如登录→购买→退款）后续用 Flink CEP 实现。
 
 subject 优先级：`user_id`（PLAYER）> `device_id`（DEVICE）。
 
