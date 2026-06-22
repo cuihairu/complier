@@ -5,7 +5,9 @@ description: 24h conversion by variant (fast, MV-backed)
 owners: []
 uuid: fa222222-2222-4222-8222-222222222222
 columns:
-  - column_name: project_id
+  - column_name: game_id
+    is_dttm: false
+  - column_name: environment
     is_dttm: false
   - column_name: exposure_date
     is_dttm: true

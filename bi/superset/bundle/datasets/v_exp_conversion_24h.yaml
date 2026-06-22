@@ -5,7 +5,9 @@ description: 24h conversion rate by variant
 owners: []
 uuid: e6666666-6666-4666-8666-666666666666
 columns:
-  - column_name: project_id
+  - column_name: game_id
+    is_dttm: false
+  - column_name: environment
     is_dttm: false
   - column_name: exposure_date
     is_dttm: true

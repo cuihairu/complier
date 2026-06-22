@@ -27,4 +27,4 @@ clickhouse+http://default:@host.docker.internal:8123/oddsmaker
   - 留存/漏斗：后续物化视图或 Flink 作业产生的聚合表
 
 6) 权限与分享
-- 根据项目划分数据库/schema，按 `project_id` 控制数据集过滤。
+- 根据 `game_id + environment` 控制数据集过滤（RowLevel Security 或仪表板过滤器）。

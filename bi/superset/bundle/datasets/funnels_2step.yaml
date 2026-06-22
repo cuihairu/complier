@@ -5,9 +5,12 @@ schema: default
 table_name: funnels_2step
 uuid: 7d8f4abc-a484-4b9c-d4c3-4b90ce6f9604
 columns:
-  - column_name: project_id
+  - column_name: game_id
     is_dttm: false
-    type: String
+    type: LowCardinality(String)
+  - column_name: environment
+    is_dttm: false
+    type: LowCardinality(String)
   - column_name: event_date
     is_dttm: true
     type: Date

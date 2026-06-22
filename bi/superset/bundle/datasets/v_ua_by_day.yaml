@@ -5,9 +5,12 @@ schema: default
 table_name: v_ua_by_day
 uuid: c2bb2222-bbbb-4ccc-8ddd-222233334444
 columns:
-  - column_name: project_id
+  - column_name: game_id
     is_dttm: false
-    type: String
+    type: LowCardinality(String)
+  - column_name: environment
+    is_dttm: false
+    type: LowCardinality(String)
   - column_name: event_date
     is_dttm: true
     type: Date

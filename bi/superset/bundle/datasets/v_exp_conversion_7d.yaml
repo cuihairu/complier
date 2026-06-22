@@ -5,7 +5,9 @@ description: 7d conversion rate by variant
 owners: []
 uuid: e7777777-7777-4777-8777-777777777777
 columns:
-  - column_name: project_id
+  - column_name: game_id
+    is_dttm: false
+  - column_name: environment
     is_dttm: false
   - column_name: exposure_date
     is_dttm: true

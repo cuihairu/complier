@@ -5,9 +5,12 @@ schema: default
 table_name: v_events_trend
 uuid: 4a5c1c8b-7151-4ebc-9f1f-1e6dfb3d6301
 columns:
-  - column_name: project_id
+  - column_name: game_id
     is_dttm: false
-    type: String
+    type: LowCardinality(String)
+  - column_name: environment
+    is_dttm: false
+    type: LowCardinality(String)
   - column_name: event_date
     is_dttm: true
     type: Date

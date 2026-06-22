@@ -5,7 +5,9 @@ description: Same-day conversion rate by variant
 owners: []
 uuid: e2222222-2222-4222-8222-222222222222
 columns:
-  - column_name: project_id
+  - column_name: game_id
+    is_dttm: false
+  - column_name: environment
     is_dttm: false
   - column_name: event_date
     is_dttm: true
