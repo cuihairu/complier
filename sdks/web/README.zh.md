@@ -30,8 +30,12 @@ await pt.flush();
 npm run build
 ```
 
-一致性测试（哈希/分流/版本比较）
+测试
 ```bash
-npm run build && npm run test:hash
+npm run build && npm test
 ```
-该测试脚本会验证 FNV-1a 32 的若干向量、分流的确定性，以及 `versionGte`/`versionLte` 的比较语义。其他端（Android/iOS/Unity）需与此一致。
+测试覆盖两部分：
+- `test:hash`：验证 FNV-1a 32、分流确定性，以及 `versionGte` / `versionLte`
+- `test:game`：验证游戏事件 helper 的事件名、顶层字段和收入字段镜像
+
+其他端（Android/iOS/Unity）需与这些语义保持一致。

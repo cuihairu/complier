@@ -204,6 +204,10 @@ public class BatchController {
         if (event.gameId == null) {
             if (node.hasNonNull("game_id")) {
                 event.gameId = node.get("game_id").asText();
+            } else if (node.hasNonNull("project_id")) {
+                event.gameId = node.get("project_id").asText();
+            } else if (node.hasNonNull("app_id")) {
+                event.gameId = parseGameIdFromAppId(node.get("app_id").asText());
             }
         }
         if (event.environment == null) {
@@ -211,6 +215,8 @@ public class BatchController {
                 event.environment = node.get("environment").asText();
             } else if (node.hasNonNull("environment_id")) {
                 event.environment = normalizeEnvironment(node.get("environment_id").asText());
+            } else if (node.hasNonNull("app_id")) {
+                event.environment = parseEnvironmentFromAppId(node.get("app_id").asText());
             }
         }
         if (event.eventType == null && node.hasNonNull("event_type")) {
@@ -313,6 +319,48 @@ public class BatchController {
             case "development" -> "dev";
             default -> value;
         };
+    }
+
+    private String parseGameIdFromAppId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String value = raw.trim();
+        String normalized = value.toLowerCase(Locale.ROOT);
+        for (String suffix : List.of("__prod", "__production", "__staging", "__stage", "__dev", "__development")) {
+            if (normalized.endsWith(suffix) && value.length() > suffix.length()) {
+                return value.substring(0, value.length() - suffix.length());
+            }
+        }
+        for (String suffix : List.of("_prod", "_production", "_staging", "_stage", "_dev", "_development")) {
+            if (normalized.endsWith(suffix) && value.length() > suffix.length()) {
+                return value.substring(0, value.length() - suffix.length());
+            }
+        }
+        return value;
+    }
+
+    private String parseEnvironmentFromAppId(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        for (String suffix : List.of("__production", "_production")) {
+            if (normalized.endsWith(suffix)) {
+                return "prod";
+            }
+        }
+        for (String suffix : List.of("__development", "_development")) {
+            if (normalized.endsWith(suffix)) {
+                return "dev";
+            }
+        }
+        for (String env : List.of("prod", "staging", "stage", "dev")) {
+            if (normalized.endsWith("__" + env) || normalized.endsWith("_" + env)) {
+                return normalizeEnvironment(env);
+            }
+        }
+        return null;
     }
 
     private Long parseEpochMillis(JsonNode node) {

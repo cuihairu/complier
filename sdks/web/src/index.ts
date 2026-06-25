@@ -12,6 +12,20 @@ export type OddsmakerOptions = {
 };
 
 export type EventProps = Record<string, any>;
+export type LevelRef = string | number;
+export type RevenueProps = EventProps & {
+  order_id?: string;
+  product_id?: string;
+  store?: string;
+  placement_id?: string;
+};
+export type AdImpressionProps = EventProps & {
+  ad_unit_id?: string;
+  placement_id?: string;
+  ad_format?: string;
+  network?: string;
+  precision?: string;
+};
 
 type Event = {
   event_id: string;
@@ -21,13 +35,33 @@ type Event = {
   event_name: string;
   user_id?: string | null;
   device_id: string;
+  player_id?: string | null;
+  character_id?: string | null;
   session_id?: string | null;
   ts_client: number;
   platform?: string | null;
   app_version?: string | null;
   country?: string | null;
+  server_id?: string | null;
+  guild_id?: string | null;
+  match_id?: string | null;
+  level_id?: string | null;
+  game_mode?: string | null;
+  order_id?: string | null;
+  product_id?: string | null;
   revenue_amount?: number | null;
   revenue_currency?: string | null;
+  receipt_hash?: string | null;
+  resource_id?: string | null;
+  resource_amount?: number | null;
+  flow_type?: string | null;
+  operation_id?: string | null;
+  operation_type?: string | null;
+  ad_network?: string | null;
+  ad_placement?: string | null;
+  ad_format?: string | null;
+  ad_impression_id?: string | null;
+  experiments?: Record<string, string> | null;
   props?: EventProps | null;
 };
 
@@ -145,6 +179,10 @@ export class Oddsmaker {
   }
 
   track(eventName: string, props?: EventProps): string {
+    return this.queueEvent(eventName, props);
+  }
+
+  private queueEvent(eventName: string, props?: EventProps, extra?: Partial<Event>): string {
     const ts = nowMs();
     this.rollSession(ts);
     const evt: Event = {
@@ -155,10 +193,12 @@ export class Oddsmaker {
       event_name: eventName,
       user_id: this.userId ?? undefined,
       device_id: this.deviceId,
+      player_id: this.playerId ?? undefined,
       session_id: this.sessionId ?? undefined,
       ts_client: ts,
       platform: 'web',
-      props: this.mergeProps(props)
+      props: this.mergeProps(props),
+      ...(extra || {})
     };
     return this.enqueueEvent(evt, ts);
   }
@@ -177,24 +217,129 @@ export class Oddsmaker {
   }
 
   revenue(amount: number, currency: string, props?: EventProps) {
-    const ts = nowMs();
-    this.rollSession(ts);
-    const evt: Event = {
-      event_id: uuidv7(),
-      game_id: this.gameId,
-      environment: this.environment,
-      event_type: inferEventType('revenue'),
-      event_name: 'revenue',
-      user_id: this.userId ?? undefined,
-      device_id: this.deviceId,
-      session_id: this.sessionId ?? undefined,
-      ts_client: ts,
-      platform: 'web',
-      revenue_amount: amount,
-      revenue_currency: currency,
-      props: this.mergeProps({ ...(props || {}), amount, currency })
-    };
-    return this.enqueueEvent(evt, ts);
+    return this.queueRevenueEvent('revenue', amount, currency, props);
+  }
+
+  tutorialStart(tutorialId: string, props?: EventProps) {
+    return this.track('tutorial_start', this.withCoreProps(props, { tutorial_id: tutorialId }));
+  }
+
+  tutorialComplete(tutorialId: string, props?: EventProps) {
+    return this.track('tutorial_complete', this.withCoreProps(props, { tutorial_id: tutorialId }));
+  }
+
+  levelStart(levelId: LevelRef, props?: EventProps) {
+    const levelIdText = String(levelId);
+    const merged = this.withCoreProps(props, { level_id: levelIdText });
+    return this.queueEvent('level_start', merged, {
+      level_id: levelIdText,
+      game_mode: stringProp(merged, 'game_mode')
+    });
+  }
+
+  levelFail(levelId: LevelRef, reason: string, props?: EventProps) {
+    const levelIdText = String(levelId);
+    const merged = this.withCoreProps(props, { level_id: levelIdText, fail_reason: reason });
+    return this.queueEvent('level_fail', merged, {
+      level_id: levelIdText,
+      game_mode: stringProp(merged, 'game_mode')
+    });
+  }
+
+  levelComplete(levelId: LevelRef, props?: EventProps) {
+    const levelIdText = String(levelId);
+    const merged = this.withCoreProps(props, { level_id: levelIdText });
+    return this.queueEvent('level_complete', merged, {
+      level_id: levelIdText,
+      game_mode: stringProp(merged, 'game_mode')
+    });
+  }
+
+  currencySource(currency: string, amount: number, props?: EventProps) {
+    const currencyCode = currency.toUpperCase();
+    return this.track('currency_source', this.withCoreProps(props, {
+      currency_code: currencyCode,
+      amount
+    }));
+  }
+
+  currencySink(currency: string, amount: number, props?: EventProps) {
+    const currencyCode = currency.toUpperCase();
+    return this.track('currency_sink', this.withCoreProps(props, {
+      currency_code: currencyCode,
+      amount
+    }));
+  }
+
+  itemGrant(itemId: string, quantity = 1, props?: EventProps) {
+    return this.track('item_grant', this.withCoreProps(props, { item_id: itemId, quantity }));
+  }
+
+  itemConsume(itemId: string, quantity = 1, props?: EventProps) {
+    return this.track('item_consume', this.withCoreProps(props, { item_id: itemId, quantity }));
+  }
+
+  iapOrder(orderId: string, amount: number, currency: string, props?: RevenueProps) {
+    const merged = this.withCoreProps(props, { order_id: orderId });
+    return this.queueRevenueEvent('iap_order', amount, currency, merged, {
+      order_id: orderId,
+      product_id: stringProp(merged, 'product_id')
+    });
+  }
+
+  webshopOrder(orderId: string, amount: number, currency: string, props?: RevenueProps) {
+    const merged = this.withCoreProps(props, { order_id: orderId });
+    return this.queueRevenueEvent('webshop_order', amount, currency, merged, {
+      order_id: orderId,
+      product_id: stringProp(merged, 'product_id')
+    });
+  }
+
+  adImpression(amount: number, currency: string, props?: AdImpressionProps) {
+    return this.queueRevenueEvent('ad_impression', amount, currency, props, {
+      ad_network: stringProp(props, 'network'),
+      ad_placement: stringProp(props, 'placement_id'),
+      ad_format: stringProp(props, 'ad_format')
+    });
+  }
+
+  rewardedAdComplete(network: string, adUnitId: string, props?: EventProps) {
+    return this.track('rewarded_ad_complete', this.withCoreProps(props, { network, ad_unit_id: adUnitId }));
+  }
+
+  eventEntry(liveopsEventId: string, props?: EventProps) {
+    return this.track('event_entry', this.withCoreProps(props, { liveops_event_id: liveopsEventId }));
+  }
+
+  eventRewardClaim(liveopsEventId: string, rewardId: string, props?: EventProps) {
+    return this.track('event_reward_claim', this.withCoreProps(props, {
+      liveops_event_id: liveopsEventId,
+      reward_id: rewardId
+    }));
+  }
+
+  guildJoin(guildId: string, props?: EventProps) {
+    return this.queueEvent('guild_join', this.withCoreProps(props, { guild_id: guildId }), { guild_id: guildId });
+  }
+
+  inviteSent(channel: string, props?: EventProps) {
+    return this.track('invite_sent', this.withCoreProps(props, { channel }));
+  }
+
+  crash(errorName: string, props?: EventProps) {
+    return this.track('crash', this.withCoreProps(props, { error_name: errorName }));
+  }
+
+  fpsDrop(fps: number, props?: EventProps) {
+    return this.track('fps_drop', this.withCoreProps(props, { fps }));
+  }
+
+  networkTimeout(endpoint: string, props?: EventProps) {
+    return this.track('network_timeout', this.withCoreProps(props, { endpoint }));
+  }
+
+  cheatFlag(ruleId: string, riskLevel: string, props?: EventProps) {
+    return this.track('cheat_flag', this.withCoreProps(props, { rule_id: ruleId, risk_level: riskLevel }));
   }
 
   async flush(): Promise<void> {
@@ -224,6 +369,23 @@ export class Oddsmaker {
     const base: EventProps = { ...this.userProps };
     if (this.playerId) base.player_id = this.playerId;
     return { ...base, ...(p || {}) };
+  }
+
+  private queueRevenueEvent(eventName: string, amount: number, currency: string, props?: EventProps, extra?: Partial<Event>) {
+    const normalizedCurrency = currency.toUpperCase();
+    return this.queueEvent(
+      eventName,
+      this.withCoreProps(props, { amount, currency: normalizedCurrency }),
+      {
+        revenue_amount: amount,
+        revenue_currency: normalizedCurrency,
+        ...(extra || {})
+      }
+    );
+  }
+
+  private withCoreProps(props: EventProps | undefined, core: EventProps) {
+    return { ...(props || {}), ...core };
   }
 
   private queueKey() { return `oddsmaker_queue_${this.gameId}_${this.environment}_${this.deviceId}`; }
@@ -281,6 +443,10 @@ export class Oddsmaker {
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 function jitter(n: number) { return Math.floor(Math.random() * n); }
+function stringProp(props: EventProps | undefined, key: string): string | undefined {
+  const value = props?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
 function inferEventType(eventName: string) {
   const name = eventName.toLowerCase();
   if (name === '$identify' || name.includes('identity')) return 'identity';
